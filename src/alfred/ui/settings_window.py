@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 SECTIONS: list[tuple[str, str, str | None]] = [
     ("general", "Geral", None),
     ("appearance", "Aparência", None),
-    ("voice", "Voz", "Fase 3 — Voz"),
+    ("voice", "Voz", None),
     ("activation", "Ativação", None),
     ("ai", "Inteligência artificial", "Fase 5 — Inteligência artificial"),
     ("applications", "Aplicações", "Fase 4 — Automação"),
@@ -76,7 +76,9 @@ FIELD_LABELS = {
     "backup_count": "Arquivos de log mantidos",
     "network_enabled": "Permitir acesso à rede",
     "screen_capture": "Captura de tela pela IA",
-    "enabled": "Mostrar cursor virtual",
+    "enabled": "Ativado",
+    "input_device": "Microfone",
+    "output_device": "Saída de áudio",
     "speed": "Velocidade (px/s)",
     "size": "Tamanho (px)",
 }
@@ -91,6 +93,10 @@ HIDDEN_FIELDS = {"widget_position"}
 """Campos ajustados por interação direta (ex.: arrastar o widget), não por formulário."""
 
 type Getter = Callable[[], Any]
+type ChoiceProviders = dict[str, Callable[[], list[str]]]
+"""Opções dinâmicas por nome de campo (ex.: dispositivos de áudio detectados)."""
+
+SYSTEM_DEFAULT = "Padrão do sistema"
 
 
 def _is_section(name: str) -> bool:
@@ -107,11 +113,25 @@ def _bounds(info: FieldInfo) -> tuple[int, int]:
     return low, high
 
 
-def build_editor(info: FieldInfo, value: Any) -> tuple[QWidget, Getter]:
+def build_editor(
+    info: FieldInfo, value: Any, choices: list[str] | None = None
+) -> tuple[QWidget, Getter]:
     """Cria o editor adequado ao tipo do campo e uma função que lê o valor editado."""
     annotation = info.annotation
+    optional = False
     if get_origin(annotation) in (Union, types.UnionType):
+        optional = type(None) in get_args(annotation)
         annotation = next(a for a in get_args(annotation) if a is not type(None))
+    if choices is not None:
+        combo = QComboBox()
+        if optional:
+            combo.addItem(SYSTEM_DEFAULT, None)
+        for choice in choices:
+            combo.addItem(choice, choice)
+        if value is not None and combo.findData(value) < 0:
+            combo.addItem(f"{value} (desconectado)", value)
+        combo.setCurrentIndex(max(0, combo.findData(value)))
+        return combo, combo.currentData
     if annotation is bool:
         checkbox = QCheckBox()
         checkbox.setChecked(bool(value))
@@ -139,16 +159,21 @@ def build_editor(info: FieldInfo, value: Any) -> tuple[QWidget, Getter]:
                 raise ValueError(f"JSON inválido: {exc.msg}") from exc
 
         return text, read_json
-    line = QLineEdit(str(value))
+    line = QLineEdit("" if value is None else str(value))
+    if optional:
+        return line, lambda: line.text().strip() or None
     return line, line.text
 
 
 class SectionForm(QWidget):
     """Formulário de uma seção real das configurações."""
 
-    def __init__(self, section: str, settings: Settings) -> None:
+    def __init__(
+        self, section: str, settings: Settings, choices: ChoiceProviders | None = None
+    ) -> None:
         super().__init__()
         self.section = section
+        self._choices = choices or {}
         self._getters: dict[str, Getter] = {}
         self._form = QFormLayout(self)
         self._form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -163,7 +188,9 @@ class SectionForm(QWidget):
         for name, info in type(current).model_fields.items():
             if name in HIDDEN_FIELDS:
                 continue
-            editor, getter = build_editor(info, getattr(current, name))
+            provider = self._choices.get(name)
+            options = _safe_choices(provider) if provider else None
+            editor, getter = build_editor(info, getattr(current, name), options)
             editor.setObjectName(name)
             if info.description:
                 editor.setToolTip(info.description)
@@ -187,6 +214,14 @@ class SectionForm(QWidget):
         widget = self.findChild(QWidget, name)
         assert widget is not None, name
         return widget
+
+
+def _safe_choices(provider: Callable[[], list[str]]) -> list[str]:
+    try:
+        return provider()
+    except Exception:
+        logger.exception("Falha ao listar opções")
+        return []
 
 
 class UnavailableSection(QWidget):
@@ -226,6 +261,7 @@ class SettingsWindow(QWidget):
         settings: SettingsService,
         *,
         on_open_panel: Callable[[], None] | None = None,
+        choices: ChoiceProviders | None = None,
     ) -> None:
         super().__init__(None, Qt.WindowType.Window)
         self.setWindowTitle("ALFRED — Configurações")
@@ -253,7 +289,7 @@ class SettingsWindow(QWidget):
             elif key == "history":
                 page = HistorySection(on_open_panel)
             else:
-                form = SectionForm(key, settings.current)
+                form = SectionForm(key, settings.current, choices)
                 self.forms[key] = form
                 page = form
             self.sections.addItem(item)
@@ -357,10 +393,12 @@ class SettingsWindowModule(Module):
         bus: EventBus,
         settings: SettingsService,
         on_open_panel: Callable[[], None] | None = None,
+        choices: ChoiceProviders | None = None,
     ) -> None:
         self._bus = bus
         self._settings = settings
         self._on_open_panel = on_open_panel
+        self._choices = choices
         self.window: SettingsWindow | None = None
         self._subscription: Subscription[SettingsChanged] | None = None
 
@@ -379,7 +417,9 @@ class SettingsWindowModule(Module):
 
     def show(self) -> None:
         if self.window is None:
-            self.window = SettingsWindow(self._settings, on_open_panel=self._on_open_panel)
+            self.window = SettingsWindow(
+                self._settings, on_open_panel=self._on_open_panel, choices=self._choices
+            )
         else:
             self.window.reload()
         self.window.show()

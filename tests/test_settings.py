@@ -109,12 +109,12 @@ def test_invalid_field_falls_back_without_losing_siblings(path: Path) -> None:
 
 
 def test_unknown_sections_and_fields_are_ignored(path: Path) -> None:
-    write(path, {"schema_version": 1, "voice": {"x": 1}, "general": {"legacy": True}})
+    write(path, {"schema_version": 1, "futuro": {"x": 1}, "general": {"legacy": True}})
 
     result = SettingsStore(path).load()
 
     assert result.settings == Settings()
-    assert any("voice" in w for w in result.warnings)
+    assert any("futuro" in w for w in result.warnings)
 
 
 def test_migration_is_applied_and_original_backed_up(path: Path) -> None:

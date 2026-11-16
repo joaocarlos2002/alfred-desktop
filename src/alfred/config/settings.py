@@ -67,6 +67,15 @@ class ActivationSettings(Section):
         return normalize_hotkey(value)
 
 
+class VoiceSettings(Section):
+    enabled: bool = False
+    """Ativar o microfone e os recursos de voz. Nenhum áudio é gravado em disco."""
+    input_device: str | None = None
+    """Microfone (nome). Vazio: dispositivo padrão do Windows."""
+    output_device: str | None = None
+    """Saída de áudio para as respostas faladas (nome). Vazio: dispositivo padrão."""
+
+
 class CursorSettings(Section):
     enabled: bool = True
     """Mostrar o cursor virtual quando o ALFRED interage com a tela."""
@@ -97,6 +106,7 @@ class Settings(BaseModel):
     schema_version: int = CURRENT_SCHEMA_VERSION
     general: GeneralSettings = Field(default_factory=GeneralSettings)
     appearance: AppearanceSettings = Field(default_factory=AppearanceSettings)
+    voice: VoiceSettings = Field(default_factory=VoiceSettings)
     activation: ActivationSettings = Field(default_factory=ActivationSettings)
     cursor: CursorSettings = Field(default_factory=CursorSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
