@@ -24,6 +24,7 @@ from alfred.core.lifecycle import ModuleManager, StartupError
 from alfred.core.settings_service import SettingsService
 from alfred.core.task_tracker import TaskTracker
 from alfred.core.tasks import TaskRegistry
+from alfred.core.voice_commands import VoiceCommandHandler
 from alfred.domain.emergency import InputReleaser
 from alfred.domain.events import Event
 from alfred.domain.hotkeys import HotkeyBackend
@@ -143,6 +144,10 @@ def bootstrap(
     activity = SqlActivityLogRepository(database)
     task_history = SqlTaskRepository(database)
     confirmations = ConfirmationService(bus, activity=activity)
+
+    async def emergency_by_voice() -> None:
+        await emergency.trigger("voz")
+
     modules: list[Module] = [
         settings,
         database,
@@ -150,6 +155,7 @@ def bootstrap(
         confirmations,
         AssistantStateService(bus),
         TaskTracker(bus, task_history),
+        VoiceCommandHandler(bus, emergency=emergency_by_voice),
     ]
     if audio_backend is not None:
         from alfred.voice.capture import AudioCapture
@@ -179,6 +185,10 @@ def bootstrap(
         )
         modules.append(tts)
         modules.append(BargeInModule(bus, tts, wake))
+        from alfred.voice.pipeline import VoicePipeline
+
+        app_voice_pipeline = VoicePipeline(bus, capture, stt)
+        modules.append(app_voice_pipeline)
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:

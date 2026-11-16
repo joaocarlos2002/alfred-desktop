@@ -24,7 +24,12 @@ from alfred.config.settings import VoiceSettings
 from alfred.core.event_bus import EventBus, Subscription
 from alfred.core.settings_service import SettingsService
 from alfred.domain.module import Health, HealthStatus, Module
-from alfred.domain.voice import SpeechFinished, SpeechStarted
+from alfred.domain.voice import (
+    SpeakRequested,
+    SpeechFinished,
+    SpeechStarted,
+    StopSpeakingRequested,
+)
 from alfred.voice.devices import DeviceBackend, resolve_device
 from alfred.voice.models import PIPER_PT_BR_FABER, ensure_files
 
@@ -318,10 +323,16 @@ class TtsModule(Module):
         )
         self._apply_tuning(voice)
         self._subscription = self._bus.subscribe(SettingsChanged, self._on_settings, name="tts")
+        self._requests = [
+            self._bus.subscribe(SpeakRequested, self._on_speak, name="tts-speak"),
+            self._bus.subscribe(StopSpeakingRequested, self._on_stop, name="tts-stop"),
+        ]
 
     async def stop(self) -> None:
         if self._subscription is not None:
             self._subscription.unsubscribe()
+        for subscription in getattr(self, "_requests", []):
+            subscription.unsubscribe()
         if self.player is not None:
             self.player.close()
             self.player = None
@@ -339,6 +350,12 @@ class TtsModule(Module):
     def stop_speaking(self) -> None:
         if self.player is not None:
             self.player.stop()
+
+    async def _on_speak(self, event: SpeakRequested) -> None:
+        self.say(event.text, interrupt=event.interrupt)
+
+    async def _on_stop(self, event: StopSpeakingRequested) -> None:
+        self.stop_speaking()
 
     @property
     def speaking(self) -> bool:
