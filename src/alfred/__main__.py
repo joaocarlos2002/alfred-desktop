@@ -9,9 +9,9 @@ import sys
 from collections.abc import Sequence
 
 from alfred import __version__
-from alfred.app import EXIT_ALREADY_RUNNING, create_application
-from alfred.infrastructure.logging_setup import LoggingOptions, configure_logging
-from alfred.infrastructure.paths import logs_dir
+from alfred.app import EXIT_ALREADY_RUNNING, bootstrap, logging_options
+from alfred.infrastructure.logging_setup import configure_logging
+from alfred.infrastructure.paths import data_dir, logs_dir
 from alfred.infrastructure.single_instance import SingleInstance
 
 logger = logging.getLogger("alfred")
@@ -22,9 +22,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument(
         "--log-level",
-        default="INFO",
+        default=None,
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        help="nível de log (padrão: INFO)",
+        help="sobrescreve o nível de log das configurações",
     )
     return parser
 
@@ -37,10 +37,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("ALFRED já está em execução.", file=sys.stderr)
             return EXIT_ALREADY_RUNNING
 
-        runtime = configure_logging(LoggingOptions(level=args.log_level, log_dir=logs_dir()))
-        logger.info("ALFRED %s iniciando (logs em %s)", __version__, runtime.log_file)
+        app, loaded = bootstrap(data_dir())
+        runtime = configure_logging(
+            logging_options(loaded.settings.logging, logs_dir(), level_override=args.log_level)
+        )
+        logger.info("ALFRED %s iniciando (dados em %s)", __version__, data_dir())
+        for warning in loaded.warnings:
+            logger.warning(warning)
         try:
-            return asyncio.run(create_application().run())
+            return asyncio.run(app.run())
         finally:
             runtime.shutdown()
 
