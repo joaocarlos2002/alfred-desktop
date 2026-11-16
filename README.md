@@ -17,7 +17,14 @@ Local-first, leve e modular, com suporte opcional a provedores externos de IA.
 ```powershell
 uv sync --all-extras --dev
 uv run alfred --version
+uv run alfred --log-level DEBUG
 ```
+
+Os dados locais (logs, banco, cache, modelos) ficam em `%LOCALAPPDATA%\ALFRED`. Em
+desenvolvimento, use `$env:ALFRED_DATA_DIR = "data"` para gravá-los em `./data`.
+
+Os logs são JSON Lines em `logs/alfred.log`, com rotação por tamanho, `correlation_id` da tarefa
+e mascaramento automático de segredos (tokens, chaves de API, senhas).
 
 ## Qualidade
 
