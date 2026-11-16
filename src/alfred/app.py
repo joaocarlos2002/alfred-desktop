@@ -11,6 +11,7 @@ from types import FrameType
 
 from alfred.core.event_bus import EventBus
 from alfred.core.lifecycle import ModuleManager, StartupError
+from alfred.domain.events import Event
 from alfred.domain.module import Module
 
 logger = logging.getLogger(__name__)
@@ -62,11 +63,29 @@ def create_application(
 ) -> Application:
     """Monta a aplicação. O event bus é sempre o primeiro módulo registrado."""
     bus = bus or EventBus()
+    bus.add_tap(_audit_event)
     manager = ModuleManager()
     manager.register(bus)
     for module in modules:
         manager.register(module)
     return Application(manager, bus)
+
+
+_event_logger = logging.getLogger("alfred.events")
+
+
+def _audit_event(event: Event) -> None:
+    """Registra todo evento publicado (nível DEBUG) para auditoria."""
+    if _event_logger.isEnabledFor(logging.DEBUG):
+        _event_logger.debug(
+            "%s",
+            type(event).__name__,
+            extra={
+                "event_id": str(event.id),
+                "event_correlation_id": str(event.correlation_id),
+                "event_source": event.source,
+            },
+        )
 
 
 @contextmanager
