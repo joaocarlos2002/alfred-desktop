@@ -11,6 +11,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
+from alfred.ai.providers import AIService, ProviderRegistry
 from alfred.config.events import SettingsChanged
 from alfred.config.settings import LoggingSettings
 from alfred.config.store import SETTINGS_FILE, LoadResult, SettingsStore
@@ -61,6 +62,7 @@ class Application:
         self.confirmations: ConfirmationService | None = None
         self.action_log: ActionLog | None = None
         self.input_lock: InputLock | None = None
+        self.ai: AIService | None = None
         self.overlay: Module | None = None
         self.virtual_cursor: Module | None = None
         self._shutdown = asyncio.Event()
@@ -111,6 +113,7 @@ def bootstrap(
     input_releaser: InputReleaser | None = None,
     audio_backend: Any | None = None,
     app_lister: Any | None = None,
+    ai_providers: tuple[Any, ...] = (),
     wake_loader: Any | None = None,
     stt_factory: Any | None = None,
     tts_builder: Any | None = None,
@@ -158,7 +161,13 @@ def bootstrap(
     async def emergency_by_voice() -> None:
         await emergency.trigger("voz")
 
+    ai_registry = ProviderRegistry()
+    for provider in ai_providers:
+        ai_registry.register(provider)
+    ai = AIService(ai_registry, settings, bus)
+
     modules: list[Module] = [
+        ai,
         settings,
         database,
         emergency,
@@ -244,6 +253,7 @@ def bootstrap(
     app.confirmations = confirmations
     app.action_log = action_log
     app.input_lock = input_lock
+    app.ai = ai
     if with_ui:
         from alfred.ui.activity_panel import ActivityPanelModule
         from alfred.ui.confirmation_panel import ConfirmationUiModule
