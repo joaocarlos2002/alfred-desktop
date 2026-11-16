@@ -25,6 +25,7 @@ from alfred.core.event_bus import EventBus
 from alfred.core.hotkey_service import HotkeyService
 from alfred.core.input_lock import InputLock
 from alfred.core.lifecycle import ModuleManager, StartupError
+from alfred.core.orchestrator import Orchestrator
 from alfred.core.permissions import PermissionService
 from alfred.core.settings_service import SettingsService
 from alfred.core.task_tracker import TaskTracker
@@ -67,6 +68,7 @@ class Application:
         self.input_lock: InputLock | None = None
         self.tools: ToolRegistry | None = None
         self.permissions: PermissionService | None = None
+        self.orchestrator: Orchestrator | None = None
         self.ai: AIService | None = None
         self.overlay: Module | None = None
         self.virtual_cursor: Module | None = None
@@ -171,6 +173,10 @@ def bootstrap(
     async def emergency_by_voice() -> None:
         await emergency.trigger("voz")
 
+    voice_handler = VoiceCommandHandler(
+        bus, emergency=emergency_by_voice, registry=command_registry
+    )
+
     ai_registry = ProviderRegistry()
     for provider in ai_providers:
         ai_registry.register(provider)
@@ -196,7 +202,7 @@ def bootstrap(
         permissions,
         AssistantStateService(bus),
         TaskTracker(bus, task_history),
-        VoiceCommandHandler(bus, emergency=emergency_by_voice, registry=command_registry),
+        voice_handler,
     ]
     if audio_backend is not None:
         from alfred.voice.capture import AudioCapture
@@ -274,7 +280,11 @@ def bootstrap(
         modules.append(
             HotkeyService(hotkeys, settings, bus, on_emergency=emergency.trigger_threadsafe)
         )
+    orchestrator = Orchestrator(ai, tool_registry, permissions, tasks, bus)
+    modules.append(orchestrator)
+    voice_handler.fallback = lambda text: orchestrator.submit(text, origin="voice")
     app = create_application(modules, bus=bus)
+    app.orchestrator = orchestrator
     app.settings = settings
     app.database = database
     app.tasks = tasks
