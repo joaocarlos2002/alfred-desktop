@@ -66,6 +66,7 @@ docs/                # documentação e ADRs
 - [Dependências entre módulos](docs/architecture/module-dependencies.md)
 - [Architecture Decision Records](docs/adr/README.md)
 - [Desempenho](docs/performance.md)
+- [Design system](docs/design-system.md)
 
 ## Roadmap
 
