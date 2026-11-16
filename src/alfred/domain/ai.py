@@ -25,6 +25,8 @@ class ChatMessage(BaseModel):
     tool_calls: tuple[ToolCall, ...] = ()
     tool_call_id: str | None = None
     """Para ``role="tool"``: a qual chamada esta mensagem responde."""
+    images: tuple[bytes, ...] = ()
+    """Imagens PNG anexadas (modelos multimodais). Nunca são registradas em log."""
 
 
 class ToolSpec(BaseModel):

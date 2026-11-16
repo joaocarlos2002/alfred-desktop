@@ -6,6 +6,7 @@ quanto tempo o modelo fica carregado após o uso (Diretriz 3: nada pesado perman
 
 from __future__ import annotations
 
+import base64
 import json
 import time
 import uuid
@@ -29,6 +30,8 @@ DEFAULT_URL = "http://127.0.0.1:11434"
 
 def _to_ollama(message: ChatMessage) -> dict[str, Any]:
     payload: dict[str, Any] = {"role": message.role, "content": message.content}
+    if message.images:
+        payload["images"] = [base64.b64encode(png).decode("ascii") for png in message.images]
     if message.tool_calls:
         payload["tool_calls"] = [
             {"function": {"name": c.name, "arguments": c.arguments}} for c in message.tool_calls
@@ -64,6 +67,7 @@ def _tool_calls(raw: list[dict[str, Any]] | None) -> tuple[ToolCall, ...]:
 
 class OllamaProvider:
     name = "ollama"
+    local = True
 
     def __init__(
         self,
@@ -100,6 +104,15 @@ class OllamaProvider:
     async def list_models(self) -> list[str]:
         data = await self._request("GET", "/api/tags", 10)
         return [model["name"] for model in data.get("models", [])]
+
+    async def vision_models(self) -> list[str]:
+        """Modelos instalados que aceitam imagens (capacidade "vision" do Ollama)."""
+        found = []
+        for model in await self.list_models():
+            info = await self._request("POST", "/api/show", 10, json={"model": model})
+            if "vision" in (info.get("capabilities") or []):
+                found.append(model)
+        return found
 
     async def chat(
         self,
