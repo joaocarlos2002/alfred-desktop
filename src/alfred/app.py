@@ -15,9 +15,11 @@ from alfred.config.settings import LoggingSettings
 from alfred.config.store import SETTINGS_FILE, LoadResult, SettingsStore
 from alfred.core.autostart_service import AutostartBackend, AutostartService
 from alfred.core.event_bus import EventBus
+from alfred.core.hotkey_service import HotkeyService
 from alfred.core.lifecycle import ModuleManager, StartupError
 from alfred.core.settings_service import SettingsService
 from alfred.domain.events import Event
+from alfred.domain.hotkeys import HotkeyBackend
 from alfred.domain.module import Module
 from alfred.infrastructure.db.database import DB_FILE, Database
 from alfred.infrastructure.logging_setup import LoggingOptions, apply_levels
@@ -85,6 +87,7 @@ def bootstrap(
     data_root: Path,
     *,
     autostart: AutostartBackend | None = None,
+    hotkeys: HotkeyBackend | None = None,
     with_tray: bool = False,
 ) -> tuple[Application, LoadResult]:
     """Monta a aplicação padrão a partir do diretório de dados.
@@ -92,8 +95,8 @@ def bootstrap(
     As configurações são carregadas de forma síncrona, antes do logging, para que o logging já
     nasça configurado; os avisos do carregamento vêm em ``LoadResult.warnings``.
 
-    ``autostart`` e ``with_tray`` só são ligados pelo executável real, para que testes nunca
-    toquem no registro do Windows nem na bandeja do sistema.
+    ``autostart``, ``hotkeys`` e ``with_tray`` só são ligados pelo executável real, para que
+    testes nunca toquem no registro do Windows, nos atalhos globais nem na bandeja do sistema.
     """
     store = SettingsStore(data_root / SETTINGS_FILE)
     loaded = store.load()
@@ -110,6 +113,8 @@ def bootstrap(
     modules: list[Module] = [settings, database]
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
+    if hotkeys is not None:
+        modules.append(HotkeyService(hotkeys, settings, bus))
     app = create_application(modules, bus=bus)
     app.settings = settings
     app.database = database

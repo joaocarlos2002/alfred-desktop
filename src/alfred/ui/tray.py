@@ -9,6 +9,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QAction, QDesktopServices
@@ -17,8 +18,9 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 from alfred import __version__
 from alfred.config.events import SettingsChanged
 from alfred.config.settings import Settings
-from alfred.core.event_bus import EventBus
+from alfred.core.event_bus import EventBus, Subscription
 from alfred.core.settings_service import SettingsService
+from alfred.domain.hotkeys import HotkeyAction, HotkeyRegistrationFailed
 from alfred.domain.module import Module
 from alfred.ui.icon import alfred_icon
 
@@ -98,12 +100,16 @@ class TrayModule(Module):
         self._icon.setToolTip("ALFRED — Always at your service.")
         self._icon.setContextMenu(self._menu.menu)
         self._icon.show()
-        self._subscription = self._bus.subscribe(
-            SettingsChanged, self._on_settings_changed, name="tray"
-        )
+        self._subscriptions: list[Subscription[Any]] = [
+            self._bus.subscribe(SettingsChanged, self._on_settings_changed, name="tray"),
+            self._bus.subscribe(
+                HotkeyRegistrationFailed, self._on_hotkey_failed, name="tray-hotkeys"
+            ),
+        ]
 
     async def stop(self) -> None:
-        self._subscription.unsubscribe()
+        for subscription in self._subscriptions:
+            subscription.unsubscribe()
         if self._icon is not None:
             self._icon.hide()
             self._icon.deleteLater()
@@ -124,3 +130,19 @@ class TrayModule(Module):
     async def _on_settings_changed(self, event: SettingsChanged) -> None:
         if self._menu is not None and event.section == "general":
             self._menu.set_autostart_checked(event.settings.general.start_with_windows)
+
+    async def _on_hotkey_failed(self, event: HotkeyRegistrationFailed) -> None:
+        if self._icon is not None:
+            self._icon.showMessage(
+                "Atalho indisponível",
+                hotkey_failure_message(event),
+                QSystemTrayIcon.MessageIcon.Warning,
+            )
+
+
+def hotkey_failure_message(event: HotkeyRegistrationFailed) -> str:
+    label = "de emergência" if event.action is HotkeyAction.EMERGENCY else "de ativação"
+    return (
+        f"O atalho {label} '{event.hotkey}' não pôde ser registrado: {event.reason}. "
+        "Escolha outra combinação em settings.json (seção activation)."
+    )
