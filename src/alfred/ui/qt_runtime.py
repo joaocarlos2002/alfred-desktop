@@ -11,6 +11,8 @@ import qasync
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
+from alfred.ui.theme import apply_theme
+
 SIGNAL_POLL_MS = 250
 
 
@@ -23,6 +25,7 @@ def ensure_qt_application() -> QApplication:
     app.setOrganizationName("ALFRED")
     # O ALFRED vive na bandeja: fechar janelas não encerra o processo.
     app.setQuitOnLastWindowClosed(False)
+    apply_theme(app)
     return app
 
 

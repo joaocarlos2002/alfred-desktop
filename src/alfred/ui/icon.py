@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QRadialGradient
+from PySide6.QtGui import QIcon, QPainter, QPen, QPixmap, QRadialGradient
 
-OBSIDIAN = QColor("#0B0D10")
-GRAPHITE = QColor("#1C2026")
-ACCENT = QColor("#C9A227")  # dourado discreto
+from alfred.ui.theme import THEME
+
+OBSIDIAN = THEME.color("obsidian")
+GRAPHITE = THEME.color("slate")
+ACCENT = THEME.color("accent")
 
 
 def render_icon_pixmap(size: int = 64) -> QPixmap:
