@@ -25,6 +25,7 @@ from alfred.core.event_bus import EventBus
 from alfred.core.hotkey_service import HotkeyService
 from alfred.core.input_lock import InputLock
 from alfred.core.lifecycle import ModuleManager, StartupError
+from alfred.core.permissions import PermissionService
 from alfred.core.settings_service import SettingsService
 from alfred.core.task_tracker import TaskTracker
 from alfred.core.tasks import TaskRegistry
@@ -36,6 +37,7 @@ from alfred.domain.hotkeys import HotkeyBackend
 from alfred.domain.module import Module
 from alfred.infrastructure.db.activity_repository import SqlActivityLogRepository
 from alfred.infrastructure.db.database import DB_FILE, Database
+from alfred.infrastructure.db.permission_repository import SqlPermissionRepository
 from alfred.infrastructure.db.task_repository import SqlTaskRepository
 from alfred.infrastructure.logging_setup import LoggingOptions, apply_levels
 
@@ -64,6 +66,7 @@ class Application:
         self.action_log: ActionLog | None = None
         self.input_lock: InputLock | None = None
         self.tools: ToolRegistry | None = None
+        self.permissions: PermissionService | None = None
         self.ai: AIService | None = None
         self.overlay: Module | None = None
         self.virtual_cursor: Module | None = None
@@ -159,6 +162,9 @@ def bootstrap(
     tool_registry = ToolRegistry()
     task_history = SqlTaskRepository(database)
     confirmations = ConfirmationService(bus, activity=activity)
+    permissions = PermissionService(
+        SqlPermissionRepository(database), confirmations, ActionLog(activity)
+    )
 
     command_registry = CommandRegistry()
 
@@ -187,6 +193,7 @@ def bootstrap(
         database,
         emergency,
         confirmations,
+        permissions,
         AssistantStateService(bus),
         TaskTracker(bus, task_history),
         VoiceCommandHandler(bus, emergency=emergency_by_voice, registry=command_registry),
@@ -276,6 +283,7 @@ def bootstrap(
     app.action_log = action_log
     app.input_lock = input_lock
     app.tools = tool_registry
+    app.permissions = permissions
     app.ai = ai
     if with_ui:
         from alfred.ui.activity_panel import ActivityPanelModule
