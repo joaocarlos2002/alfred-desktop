@@ -109,11 +109,15 @@ class OverlayWindow(QWidget):
         self.refresh_geometry()
         app = QGuiApplication.instance()
         if isinstance(app, QGuiApplication):
-            app.screenAdded.connect(lambda *_: self.refresh_geometry())
-            app.screenRemoved.connect(lambda *_: self.refresh_geometry())
+            # Slot = método do próprio QObject: o Qt desconecta sozinho quando ele é destruído.
+            app.screenAdded.connect(self._on_screens_changed)
+            app.screenRemoved.connect(self._on_screens_changed)
 
     def refresh_geometry(self) -> None:
         self.setGeometry(virtual_desktop())
+
+    def _on_screens_changed(self, _screen: object) -> None:
+        self.refresh_geometry()
 
     def add_layer(self, layer: OverlayLayer) -> None:
         self.layers.append(layer)
@@ -184,7 +188,7 @@ class HighlightLayer:
     def __init__(self, overlay: OverlayWindow) -> None:
         self._overlay = overlay
         self._items: dict[UUID, _Highlight] = {}
-        self._timer = QTimer()
+        self._timer = QTimer(overlay)
         self._timer.setInterval(100)
         self._timer.timeout.connect(self._expire)
 

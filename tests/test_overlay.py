@@ -60,6 +60,8 @@ def test_overlay_never_takes_input_or_focus(qt_app: QApplication) -> None:
     assert flags & Qt.WindowType.Tool
     assert overlay.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
     assert overlay.geometry() == virtual_desktop()
+    overlay.close()
+    overlay.deleteLater()
 
 
 def test_overlay_is_hidden_without_active_layers_and_expires(qt_app: QApplication) -> None:
@@ -79,6 +81,8 @@ def test_overlay_is_hidden_without_active_layers_and_expires(qt_app: QApplicatio
 
     annotator.clear(first)
     assert not overlay.isVisible()
+    overlay.close()
+    overlay.deleteLater()
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Win32")

@@ -64,9 +64,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             if args.headless:
                 return asyncio.run(app.run())
-            from alfred.ui.qt_runtime import run_on_qt
+            from alfred.ui.qt_runtime import run_on_qt, shutdown_qt
 
-            return run_on_qt(app.run())
+            try:
+                return run_on_qt(app.run())
+            finally:
+                shutdown_qt()
         finally:
             runtime.shutdown()
 
