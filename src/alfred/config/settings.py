@@ -92,6 +92,17 @@ class VoiceSettings(Section):
     """Volume das respostas faladas (0 a 100)."""
 
 
+class AISettings(Section):
+    provider: str = "ollama"
+    """Provedor de IA: "ollama" (local) ou um provedor externo configurado."""
+    model: str | None = None
+    """Modelo. Vazio: o primeiro disponível no provedor."""
+    timeout_seconds: int = Field(default=60, ge=5, le=600)
+    """Tempo máximo de resposta do modelo (segundos)."""
+    max_retries: int = Field(default=2, ge=0, le=5)
+    """Novas tentativas em falhas temporárias (rede, timeout)."""
+
+
 class CursorSettings(Section):
     enabled: bool = True
     """Mostrar o cursor virtual quando o ALFRED interage com a tela."""
@@ -123,6 +134,7 @@ class Settings(BaseModel):
     general: GeneralSettings = Field(default_factory=GeneralSettings)
     appearance: AppearanceSettings = Field(default_factory=AppearanceSettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
+    ai: AISettings = Field(default_factory=AISettings)
     activation: ActivationSettings = Field(default_factory=ActivationSettings)
     cursor: CursorSettings = Field(default_factory=CursorSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
