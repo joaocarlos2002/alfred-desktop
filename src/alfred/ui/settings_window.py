@@ -53,7 +53,7 @@ SECTIONS: list[tuple[str, str, str | None]] = [
     ("activation", "Ativação", None),
     ("ai", "Inteligência artificial", "Fase 5 — Inteligência artificial"),
     ("applications", "Aplicações", "Fase 4 — Automação"),
-    ("cursor", "Cursor virtual", "Fase 2 — Interface (#16)"),
+    ("cursor", "Cursor virtual", None),
     ("triggers", "Gatilhos", "Fase 6 — Autonomia"),
     ("memory", "Memória", "Fase 5 — Inteligência artificial"),
     ("privacy", "Privacidade", None),
@@ -76,6 +76,9 @@ FIELD_LABELS = {
     "backup_count": "Arquivos de log mantidos",
     "network_enabled": "Permitir acesso à rede",
     "screen_capture": "Captura de tela pela IA",
+    "enabled": "Mostrar cursor virtual",
+    "speed": "Velocidade (px/s)",
+    "size": "Tamanho (px)",
 }
 CHOICE_LABELS = {
     "ask": "Perguntar",

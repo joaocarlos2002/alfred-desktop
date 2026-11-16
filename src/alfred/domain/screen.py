@@ -33,3 +33,22 @@ class ScreenAnnotator(Protocol):
     def clear(self, highlight_id: UUID) -> None: ...
 
     def clear_all(self) -> None: ...
+
+
+class VirtualCursor(Protocol):
+    """Cursor exclusivamente visual (RF-007): mostra o que o ALFRED está fazendo.
+
+    Nunca move o cursor físico nem simula um dispositivo de mouse. Coordenadas em pixels físicos.
+    """
+
+    def move_to(self, x: int, y: int) -> None: ...
+
+    def click(self) -> None:
+        """Indica visualmente um clique na posição atual."""
+        ...
+
+    def point_at(self, rect: ScreenRect, *, label: str | None = None) -> None:
+        """Move até o centro do elemento e o destaca."""
+        ...
+
+    def hide(self) -> None: ...

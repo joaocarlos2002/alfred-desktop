@@ -67,6 +67,15 @@ class ActivationSettings(Section):
         return normalize_hotkey(value)
 
 
+class CursorSettings(Section):
+    enabled: bool = True
+    """Mostrar o cursor virtual quando o ALFRED interage com a tela."""
+    speed: int = Field(default=1400, ge=200, le=6000)
+    """Velocidade do movimento, em pixels por segundo."""
+    size: int = Field(default=26, ge=16, le=64)
+    """Tamanho do cursor, em pixels."""
+
+
 class LoggingSettings(Section):
     level: LogLevel = "INFO"
     module_levels: dict[str, LogLevel] = Field(default_factory=dict)
@@ -89,6 +98,7 @@ class Settings(BaseModel):
     general: GeneralSettings = Field(default_factory=GeneralSettings)
     appearance: AppearanceSettings = Field(default_factory=AppearanceSettings)
     activation: ActivationSettings = Field(default_factory=ActivationSettings)
+    cursor: CursorSettings = Field(default_factory=CursorSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     privacy: PrivacySettings = Field(default_factory=PrivacySettings)
 
