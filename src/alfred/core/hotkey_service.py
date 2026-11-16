@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from functools import partial
 
 from alfred.config.events import SettingsChanged
@@ -37,10 +38,19 @@ class HotkeyService(Module):
     depends_on = ("event_bus", "settings")
     optional = True
 
-    def __init__(self, backend: HotkeyBackend, settings: SettingsService, bus: EventBus) -> None:
+    def __init__(
+        self,
+        backend: HotkeyBackend,
+        settings: SettingsService,
+        bus: EventBus,
+        *,
+        on_emergency: Callable[[], None] | None = None,
+    ) -> None:
+        """``on_emergency`` é chamado direto na thread do backend (caminho rápido, sem fila)."""
         self._backend = backend
         self._settings = settings
         self._bus = bus
+        self._on_emergency = on_emergency
         self._registered: dict[HotkeyAction, tuple[int, str]] = {}
         self._lock = asyncio.Lock()
 
@@ -110,4 +120,6 @@ class HotkeyService(Module):
 
     def _pressed(self, action: HotkeyAction, hotkey: str) -> None:
         """Executado na thread do backend."""
+        if action is HotkeyAction.EMERGENCY and self._on_emergency is not None:
+            self._on_emergency()
         self._bus.publish_threadsafe(HotkeyPressed(action=action, hotkey=hotkey))
