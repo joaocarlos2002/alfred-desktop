@@ -22,6 +22,7 @@ from alfred.core.confirmations import ConfirmationService
 from alfred.core.emergency import EmergencyStop
 from alfred.core.event_bus import EventBus
 from alfred.core.hotkey_service import HotkeyService
+from alfred.core.input_lock import InputLock
 from alfred.core.lifecycle import ModuleManager, StartupError
 from alfred.core.settings_service import SettingsService
 from alfred.core.task_tracker import TaskTracker
@@ -59,6 +60,7 @@ class Application:
         self.emergency: EmergencyStop | None = None
         self.confirmations: ConfirmationService | None = None
         self.action_log: ActionLog | None = None
+        self.input_lock: InputLock | None = None
         self.overlay: Module | None = None
         self.virtual_cursor: Module | None = None
         self._shutdown = asyncio.Event()
@@ -147,6 +149,7 @@ def bootstrap(
     )
     activity = SqlActivityLogRepository(database)
     action_log = ActionLog(activity)
+    input_lock = InputLock()
     task_history = SqlTaskRepository(database)
     confirmations = ConfirmationService(bus, activity=activity)
 
@@ -218,6 +221,9 @@ def bootstrap(
 
         uia = UiaService(action_log, cursor=lambda: _cursor_of(app))
         modules.append(uia)
+        from alfred.automation.input_service import InputService
+
+        modules.append(InputService(input_lock, action_log))
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
@@ -231,6 +237,7 @@ def bootstrap(
     app.emergency = emergency
     app.confirmations = confirmations
     app.action_log = action_log
+    app.input_lock = input_lock
     if with_ui:
         from alfred.ui.activity_panel import ActivityPanelModule
         from alfred.ui.confirmation_panel import ConfirmationUiModule
