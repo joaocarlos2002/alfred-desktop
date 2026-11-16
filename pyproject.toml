@@ -32,6 +32,7 @@ ai = []
 automation = [
     "psutil>=6.0",
     "pywinauto>=0.6.9; sys_platform == 'win32'",
+    "playwright>=1.48",
     "pywin32>=306; sys_platform == 'win32'",
 ]
 
@@ -95,7 +96,7 @@ module = ["alfred.domain.*", "alfred.core.*"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["qasync", "sounddevice", "vosk", "faster_whisper", "piper", "piper.*", "win32com.*", "pythoncom", "win32gui", "win32process", "win32con", "win32api", "psutil", "pywinauto"]
+module = ["qasync", "sounddevice", "vosk", "faster_whisper", "piper", "piper.*", "win32com.*", "pythoncom", "win32gui", "win32process", "win32con", "win32api", "psutil", "pywinauto", "playwright", "playwright.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- import-linter

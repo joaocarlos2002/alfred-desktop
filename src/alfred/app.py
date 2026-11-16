@@ -224,6 +224,9 @@ def bootstrap(
         from alfred.automation.input_service import InputService
 
         modules.append(InputService(input_lock, action_log))
+        from alfred.automation.browser import BrowserService
+
+        modules.append(BrowserService(action_log, confirmations, data_root / "browser-profile"))
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
