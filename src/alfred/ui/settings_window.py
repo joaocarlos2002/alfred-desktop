@@ -82,6 +82,10 @@ FIELD_LABELS = {
     "wake_word_enabled": 'Ativação pela palavra "Alfred"',
     "wake_word_confidence": "Confiança mínima da palavra",
     "stt_model": "Modelo de reconhecimento",
+    "tts_engine": "Voz das respostas",
+    "tts_voice": "Voz do Windows",
+    "tts_rate": "Velocidade da fala",
+    "tts_volume": "Volume da fala",
     "stt_idle_unload_seconds": "Liberar modelo após (s)",
     "output_device": "Saída de áudio",
     "speed": "Velocidade (px/s)",
@@ -96,6 +100,8 @@ CHOICE_LABELS = {
     "tiny": "Rápido (tiny)",
     "base": "Equilibrado (base)",
     "small": "Preciso (small)",
+    "sapi": "Windows (SAPI)",
+    "piper": "Neural local (Piper)",
 }
 HIDDEN_FIELDS = {"widget_position"}
 """Campos ajustados por interação direta (ex.: arrastar o widget), não por formulário."""
