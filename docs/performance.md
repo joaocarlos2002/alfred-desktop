@@ -20,6 +20,7 @@ de núcleos.
 | ---- | ------ | ---- | ------------- | --------- | ---------------- |
 | 2026-11-16 | 0.1.0 (Fase 1, #8) | Qt + bandeja | 1,75 s | 97,9 MB | 0,02% (0,13%) |
 | 2026-11-16 | 0.1.0 (Fase 1, #8) | headless | 1,18 s | 69,7 MB | 0,00% (0,00%) |
+| 2026-11-16 | 0.1.0 (Fase 2 completa) | Qt + bandeja + widget + overlay | 1,46 s | 117,3 MB | 0,03% (0,13%) |
 
 Máquina: Windows 11 Pro (build 26300), Python 3.12.16. Os consumos de modelos de IA e de
 reconhecimento de voz serão medidos separadamente quando esses módulos existirem.
