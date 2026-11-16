@@ -227,6 +227,9 @@ def bootstrap(
         from alfred.automation.browser import BrowserService
 
         modules.append(BrowserService(action_log, confirmations, data_root / "browser-profile"))
+        from alfred.automation.screen import ScreenCaptureService
+
+        modules.append(ScreenCaptureService(settings, confirmations, action_log, bus))
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
@@ -264,6 +267,14 @@ def bootstrap(
         overlay = OverlayModule()
         app.overlay = overlay
         app.manager.register(overlay)
+        from alfred.domain.screen import ScreenCaptured
+
+        async def flash_capture(event: ScreenCaptured) -> None:
+            # Indicação visual de toda captura de tela (RF-008).
+            if overlay.annotator is not None:
+                overlay.annotator.highlight(event.area, label="Captura de tela", duration=0.8)
+
+        bus.subscribe(ScreenCaptured, flash_capture, name="capture-flash")
         app.virtual_cursor = VirtualCursorModule(overlay=overlay, settings=settings, bus=bus)
         app.manager.register(app.virtual_cursor)
         settings_window = SettingsWindowModule(bus=bus, settings=settings, on_open_panel=panel.show)
