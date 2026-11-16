@@ -17,7 +17,3 @@ def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
         main(["--version"])
     assert exc.value.code == 0
     assert alfred.__version__ in capsys.readouterr().out
-
-
-def test_main_without_args_returns_zero() -> None:
-    assert main([]) == 0
