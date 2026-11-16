@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from types import FrameType
 
+from alfred.core.event_bus import EventBus
 from alfred.core.lifecycle import ModuleManager, StartupError
 from alfred.domain.module import Module
 
@@ -26,8 +27,9 @@ _SHUTDOWN_SIGNALS = tuple(
 class Application:
     """Inicia os módulos, aguarda um pedido de encerramento e encerra tudo de forma graciosa."""
 
-    def __init__(self, manager: ModuleManager) -> None:
+    def __init__(self, manager: ModuleManager, bus: EventBus) -> None:
         self.manager = manager
+        self.bus = bus
         self._shutdown = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -55,11 +57,16 @@ class Application:
         return EXIT_OK
 
 
-def create_application(modules: Iterable[Module] = ()) -> Application:
+def create_application(
+    modules: Iterable[Module] = (), *, bus: EventBus | None = None
+) -> Application:
+    """Monta a aplicação. O event bus é sempre o primeiro módulo registrado."""
+    bus = bus or EventBus()
     manager = ModuleManager()
+    manager.register(bus)
     for module in modules:
         manager.register(module)
-    return Application(manager)
+    return Application(manager, bus)
 
 
 @contextmanager
