@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import uuid4
 
+from alfred.core.commands import CommandRegistry
 from alfred.core.event_bus import EventBus, Subscription
 from alfred.domain.module import Module
 from alfred.domain.tasks import (
@@ -87,6 +88,7 @@ class Outcome:
     command: str
     reply: str | None
     understood: bool = True
+    tool: str | None = None
 
 
 type Action = Callable[[], Awaitable[object]]
@@ -102,7 +104,9 @@ class VoiceCommandHandler(Module):
         *,
         emergency: Action,
         clock: Callable[[], datetime] = datetime.now,
+        registry: CommandRegistry | None = None,
     ) -> None:
+        self.registry = registry or CommandRegistry()
         self._bus = bus
         self._emergency = emergency
         self._clock = clock
@@ -131,6 +135,11 @@ class VoiceCommandHandler(Module):
             return Outcome("hora", spoken_time(self._clock()))
         if re.search(r"\b(que dia|data de hoje|dia e hoje)\b", command):
             return Outcome("data", spoken_date(self._clock()))
+        registered = self.registry.match(command)
+        if registered is not None:
+            found, handler = registered
+            result = await handler(found)
+            return Outcome(result.tool, result.reply, understood=result.succeeded, tool=result.tool)
         return Outcome("desconhecido", UNKNOWN_REPLY.format(text=text.strip()), understood=False)
 
     async def handle(self, event: UtteranceTranscribed) -> None:
@@ -163,7 +172,7 @@ class VoiceCommandHandler(Module):
                 position=1,
                 status=StepStatus.SUCCEEDED if outcome.understood else StepStatus.FAILED,
                 result={"comando": outcome.command},
-                error=None if outcome.understood else "comando ainda não suportado",
+                error=None if outcome.understood else outcome.reply or "comando não cumprido",
             )
         )
         if outcome.reply:
@@ -183,6 +192,6 @@ class VoiceCommandHandler(Module):
             TaskFinished(
                 task_id=task_id,
                 status=TaskStatus.SUCCEEDED if outcome.understood else TaskStatus.FAILED,
-                error=None if outcome.understood else "Comando ainda não suportado",
+                error=None if outcome.understood else outcome.reply or "Comando não cumprido",
             )
         )

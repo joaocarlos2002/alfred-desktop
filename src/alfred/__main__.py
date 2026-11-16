@@ -11,6 +11,7 @@ from dataclasses import replace
 
 from alfred import __version__
 from alfred.app import EXIT_ALREADY_RUNNING, bootstrap, logging_options
+from alfred.automation.apps import powershell_start_apps
 from alfred.infrastructure.autostart import Autostart
 from alfred.infrastructure.hotkeys import Win32HotkeyListener
 from alfred.infrastructure.input_release import Win32InputReleaser
@@ -53,6 +54,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             hotkeys=Win32HotkeyListener(),
             input_releaser=Win32InputReleaser(),
             audio_backend=SoundDeviceBackend(),
+            app_lister=powershell_start_apps,
             with_ui=not args.headless,
         )
         options = logging_options(

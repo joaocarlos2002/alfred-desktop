@@ -17,6 +17,7 @@ from alfred.config.store import SETTINGS_FILE, LoadResult, SettingsStore
 from alfred.core.action_log import ActionLog
 from alfred.core.assistant_state import AssistantStateService
 from alfred.core.autostart_service import AutostartBackend, AutostartService
+from alfred.core.commands import CommandRegistry
 from alfred.core.confirmations import ConfirmationService
 from alfred.core.emergency import EmergencyStop
 from alfred.core.event_bus import EventBus
@@ -107,6 +108,7 @@ def bootstrap(
     hotkeys: HotkeyBackend | None = None,
     input_releaser: InputReleaser | None = None,
     audio_backend: Any | None = None,
+    app_lister: Any | None = None,
     wake_loader: Any | None = None,
     stt_factory: Any | None = None,
     tts_builder: Any | None = None,
@@ -148,6 +150,8 @@ def bootstrap(
     task_history = SqlTaskRepository(database)
     confirmations = ConfirmationService(bus, activity=activity)
 
+    command_registry = CommandRegistry()
+
     async def emergency_by_voice() -> None:
         await emergency.trigger("voz")
 
@@ -158,7 +162,7 @@ def bootstrap(
         confirmations,
         AssistantStateService(bus),
         TaskTracker(bus, task_history),
-        VoiceCommandHandler(bus, emergency=emergency_by_voice),
+        VoiceCommandHandler(bus, emergency=emergency_by_voice, registry=command_registry),
     ]
     if audio_backend is not None:
         from alfred.voice.capture import AudioCapture
@@ -192,6 +196,19 @@ def bootstrap(
 
         app_voice_pipeline = VoicePipeline(bus, capture, stt)
         modules.append(app_voice_pipeline)
+    if app_lister is not None:
+        from alfred.automation.apps import AppCatalog
+        from alfred.automation.service import AppsService
+        from alfred.infrastructure.db.application_repository import SqlApplicationRepository
+
+        apps = AppsService(
+            AppCatalog(app_lister),
+            action_log,
+            confirmations,
+            aliases=SqlApplicationRepository(database),
+        )
+        apps.register_commands(command_registry)
+        modules.append(apps)
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
