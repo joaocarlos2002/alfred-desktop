@@ -21,6 +21,7 @@ from alfred.core.event_bus import EventBus
 from alfred.core.hotkey_service import HotkeyService
 from alfred.core.lifecycle import ModuleManager, StartupError
 from alfred.core.settings_service import SettingsService
+from alfred.core.task_tracker import TaskTracker
 from alfred.core.tasks import TaskRegistry
 from alfred.domain.emergency import InputReleaser
 from alfred.domain.events import Event
@@ -28,6 +29,7 @@ from alfred.domain.hotkeys import HotkeyBackend
 from alfred.domain.module import Module
 from alfred.infrastructure.db.activity_repository import SqlActivityLogRepository
 from alfred.infrastructure.db.database import DB_FILE, Database
+from alfred.infrastructure.db.task_repository import SqlTaskRepository
 from alfred.infrastructure.logging_setup import LoggingOptions, apply_levels
 
 logger = logging.getLogger(__name__)
@@ -129,6 +131,7 @@ def bootstrap(
         activity=SqlActivityLogRepository(database),
     )
     activity = SqlActivityLogRepository(database)
+    task_history = SqlTaskRepository(database)
     confirmations = ConfirmationService(bus, activity=activity)
     modules: list[Module] = [
         settings,
@@ -136,6 +139,7 @@ def bootstrap(
         emergency,
         confirmations,
         AssistantStateService(bus),
+        TaskTracker(bus, task_history),
     ]
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
@@ -150,14 +154,29 @@ def bootstrap(
     app.emergency = emergency
     app.confirmations = confirmations
     if with_ui:
+        from alfred.ui.activity_panel import ActivityPanelModule
         from alfred.ui.confirmation_panel import ConfirmationUiModule
         from alfred.ui.tray import TrayModule
         from alfred.ui.widget import WidgetModule
 
-        app.manager.register(WidgetModule(bus=bus, settings=settings))
+        panel = ActivityPanelModule(
+            bus=bus,
+            tasks=task_history,
+            activity=activity,
+            is_running=tasks.is_running,
+            cancel=tasks.cancel,
+        )
+        app.manager.register(panel)
+        app.manager.register(WidgetModule(bus=bus, settings=settings, on_click=panel.toggle))
         app.manager.register(ConfirmationUiModule(bus=bus, service=confirmations))
         app.manager.register(
-            TrayModule(bus=bus, settings=settings, data_dir=data_root, on_quit=app.request_shutdown)
+            TrayModule(
+                bus=bus,
+                settings=settings,
+                data_dir=data_root,
+                on_quit=app.request_shutdown,
+                on_open_panel=panel.show,
+            )
         )
     return app, loaded
 
