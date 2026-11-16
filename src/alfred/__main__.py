@@ -12,6 +12,7 @@ from dataclasses import replace
 from alfred import __version__
 from alfred.app import EXIT_ALREADY_RUNNING, bootstrap, logging_options
 from alfred.infrastructure.autostart import Autostart
+from alfred.infrastructure.hotkeys import Win32HotkeyListener
 from alfred.infrastructure.logging_setup import configure_logging
 from alfred.infrastructure.paths import data_dir, logs_dir
 from alfred.infrastructure.single_instance import SingleInstance
@@ -44,7 +45,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("ALFRED já está em execução.", file=sys.stderr)
             return EXIT_ALREADY_RUNNING
 
-        app, loaded = bootstrap(data_dir(), autostart=Autostart(), with_tray=not args.headless)
+        app, loaded = bootstrap(
+            data_dir(),
+            autostart=Autostart(),
+            hotkeys=Win32HotkeyListener(),
+            with_tray=not args.headless,
+        )
         options = logging_options(
             loaded.settings.logging, logs_dir(), level_override=args.log_level
         )
