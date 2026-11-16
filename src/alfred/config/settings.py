@@ -78,6 +78,10 @@ class VoiceSettings(Section):
     """Ativação pela palavra "Alfred" (requer a voz ativada; baixa um modelo de ~31 MB)."""
     wake_word_confidence: float = Field(default=0.9, ge=0.5, le=0.99)
     """Confiança mínima para aceitar a palavra. Maior = menos ativações acidentais."""
+    stt_model: Literal["tiny", "base", "small"] = "base"
+    """Modelo de reconhecimento de fala: maior = mais preciso e mais lento."""
+    stt_idle_unload_seconds: int = Field(default=120, ge=10, le=3600)
+    """Libera o modelo de fala da memória após este tempo sem uso (segundos)."""
 
 
 class CursorSettings(Section):

@@ -81,6 +81,8 @@ FIELD_LABELS = {
     "input_device": "Microfone",
     "wake_word_enabled": 'Ativação pela palavra "Alfred"',
     "wake_word_confidence": "Confiança mínima da palavra",
+    "stt_model": "Modelo de reconhecimento",
+    "stt_idle_unload_seconds": "Liberar modelo após (s)",
     "output_device": "Saída de áudio",
     "speed": "Velocidade (px/s)",
     "size": "Tamanho (px)",
@@ -91,6 +93,9 @@ CHOICE_LABELS = {
     "deny": "Negar",
     "dark": "Escuro",
     "pt-BR": "Português (Brasil)",
+    "tiny": "Rápido (tiny)",
+    "base": "Equilibrado (base)",
+    "small": "Preciso (small)",
 }
 HIDDEN_FIELDS = {"widget_position"}
 """Campos ajustados por interação direta (ex.: arrastar o widget), não por formulário."""

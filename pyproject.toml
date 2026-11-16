@@ -24,6 +24,7 @@ voice = [
     "numpy>=2.0",
     "sounddevice>=0.5",
     "vosk>=0.3.45",
+    "faster-whisper>=1.1",
 ]
 ai = []
 automation = []
@@ -88,7 +89,7 @@ module = ["alfred.domain.*", "alfred.core.*"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["qasync", "sounddevice", "vosk"]
+module = ["qasync", "sounddevice", "vosk", "faster_whisper", "faster_whisper.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- import-linter
