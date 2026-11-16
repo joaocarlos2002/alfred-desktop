@@ -177,7 +177,7 @@ async def test_invalid_update_changes_nothing(path: Path) -> None:
         await service.update("logging", backup_count=-1)
 
     assert service.current == Settings()
-    assert not path.exists()  # noqa: ASYNC240 - verificação síncrona trivial em teste
+    assert not path.exists()
 
 
 async def test_bootstrap_applies_logging_levels_at_runtime(tmp_path: Path) -> None:

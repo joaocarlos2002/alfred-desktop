@@ -18,6 +18,7 @@ from alfred.core.lifecycle import ModuleManager, StartupError
 from alfred.core.settings_service import SettingsService
 from alfred.domain.events import Event
 from alfred.domain.module import Module
+from alfred.infrastructure.db.database import DB_FILE, Database
 from alfred.infrastructure.logging_setup import LoggingOptions, apply_levels
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class Application:
         self.manager = manager
         self.bus = bus
         self.settings: SettingsService | None = None
+        self.database: Database | None = None
         self._shutdown = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -95,8 +97,10 @@ def bootstrap(data_root: Path) -> tuple[Application, LoadResult]:
             apply_levels(current.level, current.module_levels)
 
     bus.subscribe(SettingsChanged, on_settings_changed, name="logging-levels")
-    app = create_application([settings], bus=bus)
+    database = Database(data_root / DB_FILE)
+    app = create_application([settings, database], bus=bus)
     app.settings = settings
+    app.database = database
     return app, loaded
 
 

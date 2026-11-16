@@ -12,7 +12,9 @@ classifiers = [
     "Private :: Do Not Upload",
 ]
 dependencies = [
+    "alembic>=1.14",
     "pydantic>=2.9",
+    "sqlalchemy>=2.0.36",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +52,12 @@ src = ["src", "tests"]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "PT", "N"]
 # ASYNC109: `timeout` explícito é parte intencional das APIs de request/drain/stop.
 ignore = ["ASYNC109"]
+
+[tool.ruff.lint.per-file-ignores]
+# Em testes, operações síncronas triviais de arquivo dentro de async def são aceitáveis.
+"tests/**" = ["ASYNC240"]
+# Migrações geradas pelo Alembic.
+"src/alfred/infrastructure/db/migrations/versions/*" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
