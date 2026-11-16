@@ -156,6 +156,7 @@ def bootstrap(
     if with_ui:
         from alfred.ui.activity_panel import ActivityPanelModule
         from alfred.ui.confirmation_panel import ConfirmationUiModule
+        from alfred.ui.settings_window import SettingsWindowModule
         from alfred.ui.tray import TrayModule
         from alfred.ui.widget import WidgetModule
 
@@ -169,6 +170,8 @@ def bootstrap(
         app.manager.register(panel)
         app.manager.register(WidgetModule(bus=bus, settings=settings, on_click=panel.toggle))
         app.manager.register(ConfirmationUiModule(bus=bus, service=confirmations))
+        settings_window = SettingsWindowModule(bus=bus, settings=settings, on_open_panel=panel.show)
+        app.manager.register(settings_window)
         app.manager.register(
             TrayModule(
                 bus=bus,
@@ -176,6 +179,7 @@ def bootstrap(
                 data_dir=data_root,
                 on_quit=app.request_shutdown,
                 on_open_panel=panel.show,
+                on_open_settings=settings_window.show,
             )
         )
     return app, loaded
