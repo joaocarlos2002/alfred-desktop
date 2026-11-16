@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLineEdit, QSpinBox
+
+from alfred.app import bootstrap
+from alfred.config.settings import Settings
+from alfred.ui.qt_runtime import ensure_qt_application, run_on_qt
+from alfred.ui.settings_window import SECTIONS, SettingsWindow, SettingsWindowModule
+
+
+@pytest.fixture(scope="module")
+def qt_app() -> QApplication:
+    return ensure_qt_application()
+
+
+def window_for(tmp_path: Path) -> tuple[SettingsWindow, object]:
+    app, _ = bootstrap(tmp_path)
+    assert app.settings is not None
+    return SettingsWindow(app.settings), app
+
+
+def test_every_rf013_section_is_listed(qt_app: QApplication, tmp_path: Path) -> None:
+    window, _ = window_for(tmp_path)
+    titles = [window.sections.item(i).text() for i in range(window.sections.count())]
+
+    assert len(titles) == 13
+    for _, title, phase in SECTIONS:
+        assert any(t.startswith(title) for t in titles)
+        if phase is not None:
+            assert f"{title}  ·  em breve" in titles
+
+
+def test_forms_exist_only_for_real_sections(qt_app: QApplication, tmp_path: Path) -> None:
+    window, _ = window_for(tmp_path)
+    assert set(window.forms) == set(Settings.section_names())
+
+
+def test_editors_match_field_types(qt_app: QApplication, tmp_path: Path) -> None:
+    window, _ = window_for(tmp_path)
+
+    assert isinstance(window.forms["general"].editor("start_with_windows"), QCheckBox)
+    assert isinstance(window.forms["privacy"].editor("screen_capture"), QComboBox)
+    assert isinstance(window.forms["activation"].editor("activate_hotkey"), QLineEdit)
+    spin = window.forms["logging"].editor("backup_count")
+    assert isinstance(spin, QSpinBox)
+    assert (spin.minimum(), spin.maximum()) == (0, 50)
+    assert window.forms["appearance"].findChild(QLineEdit, "widget_position") is None
+    assert "Atalho global" in window.forms["activation"].editor("activate_hotkey").toolTip()
+
+
+def test_apply_saves_valid_changes(qt_app: QApplication, tmp_path: Path) -> None:
+    app, _ = bootstrap(tmp_path)
+    assert app.settings is not None
+    window = SettingsWindow(app.settings)
+
+    async def scenario() -> bool:
+        await app.manager.start_all()
+        window.forms["appearance"].editor("animations").setChecked(False)  # type: ignore[attr-defined]
+        combo = window.forms["privacy"].editor("screen_capture")
+        assert isinstance(combo, QComboBox)
+        combo.setCurrentIndex(combo.findData("deny"))
+        ok = await window.apply()
+        await app.manager.stop_all()
+        return ok
+
+    assert run_on_qt(scenario())
+    assert app.settings.current.appearance.animations is False
+    assert app.settings.current.privacy.screen_capture == "deny"
+    assert "salvas" in window.feedback.text()
+
+
+def test_invalid_value_shows_error_and_changes_nothing(
+    qt_app: QApplication, tmp_path: Path
+) -> None:
+    app, _ = bootstrap(tmp_path)
+    assert app.settings is not None
+    window = SettingsWindow(app.settings)
+
+    async def scenario() -> bool:
+        await app.manager.start_all()
+        hotkey = window.forms["activation"].editor("activate_hotkey")
+        assert isinstance(hotkey, QLineEdit)
+        hotkey.setText("space")
+        levels = window.forms["logging"].editor("module_levels")
+        levels.setPlainText("{ não é json")  # type: ignore[attr-defined]
+        ok = await window.apply()
+        await app.manager.stop_all()
+        return ok
+
+    assert run_on_qt(scenario()) is False
+    assert app.settings.current.activation.activate_hotkey == "ctrl+alt+space"
+    text = window.feedback.text()
+    assert "Não salvo" in text
+    assert "Atalho de ativação" in text
+    assert "JSON inválido" in text
+
+
+def test_revert_restores_saved_values(qt_app: QApplication, tmp_path: Path) -> None:
+    window, _ = window_for(tmp_path)
+    checkbox = window.forms["general"].editor("start_with_windows")
+    assert isinstance(checkbox, QCheckBox)
+    checkbox.setChecked(True)
+
+    window.reload()
+
+    assert not window.forms["general"].editor("start_with_windows").isChecked()  # type: ignore[attr-defined]
+
+
+def test_module_refreshes_form_on_external_change(qt_app: QApplication, tmp_path: Path) -> None:
+    app, _ = bootstrap(tmp_path)
+    assert app.settings is not None
+    module = SettingsWindowModule(bus=app.bus, settings=app.settings)
+
+    async def scenario() -> bool:
+        assert app.settings is not None
+        await app.manager.start_all()
+        await module.start()
+        module.show()
+        await app.settings.update("appearance", widget_visible=False)  # ex.: pela bandeja
+        await app.bus.drain(timeout=1)
+        assert module.window is not None
+        visible = module.window.forms["appearance"].editor("widget_visible").isChecked()  # type: ignore[attr-defined]
+        await module.stop()
+        await app.manager.stop_all()
+        return bool(visible)
+
+    assert run_on_qt(scenario()) is False

@@ -149,7 +149,16 @@ QHeaderView::section {{
 QTabWidget::pane {{ border: 1px solid {c.slate}; border-radius: {r.sm}px; }}
 QTabBar::tab {{ background: transparent; color: {c.text_muted}; padding: {s.sm}px {s.md}px; }}
 QTabBar::tab:selected {{ color: {c.accent}; border-bottom: 2px solid {c.accent}; }}
-QListWidget#sections::item {{ padding: {s.sm}px {s.md}px; border-radius: {r.sm}px; }}
+QListWidget#sections {{ padding: {s.xs}px; }}
+QListWidget#sections::item {{ padding: {s.xs + 1}px {s.sm}px; border-radius: {r.sm}px; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 2px; }}
+QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 2px; }}
+QScrollBar::handle {{
+    background: {c.steel}; border-radius: 3px; min-height: 24px; min-width: 24px;
+}}
+QScrollBar::handle:hover {{ background: {c.text_muted}; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 QListWidget#sections::item:selected {{ background-color: {c.steel}; color: {c.accent}; }}
 QLabel[role="title"] {{ font-size: {t.size_title}pt; font-weight: {t.weight_title}; }}
 QLabel[role="muted"] {{ color: {c.text_muted}; }}

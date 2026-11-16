@@ -34,7 +34,10 @@ def normalize_hotkey(value: str) -> str:
 
 
 class Section(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore", validate_default=True)
+    # As docstrings dos atributos viram ``description`` (exibida no painel de configurações).
+    model_config = ConfigDict(
+        frozen=True, extra="ignore", validate_default=True, use_attribute_docstrings=True
+    )
 
 
 class GeneralSettings(Section):
