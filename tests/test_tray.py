@@ -29,29 +29,41 @@ def test_icon_renders_all_sizes(qt_app: QApplication) -> None:
 def test_menu_exposes_only_real_actions(qt_app: QApplication, tmp_path: Path) -> None:
     quits: list[bool] = []
     toggles: list[bool] = []
+    widget_toggles: list[bool] = []
     menu = TrayMenu(
         on_quit=lambda: quits.append(True),
         on_toggle_autostart=toggles.append,
+        on_toggle_widget=widget_toggles.append,
         data_dir=tmp_path,
     )
 
     labels = [a.text() for a in menu.menu.actions() if not a.isSeparator()]
-    assert labels[1:] == ["Iniciar com o Windows", "Abrir pasta de dados", "Sair"]
+    assert labels[1:] == [
+        "Mostrar widget",
+        "Iniciar com o Windows",
+        "Abrir pasta de dados",
+        "Sair",
+    ]
 
     menu.quit.trigger()
     menu.autostart.trigger()
+    assert menu.widget is not None
+    menu.widget.trigger()
     assert quits == [True]
     assert toggles == [True]
+    assert widget_toggles == [True]
 
     menu.set_autostart_checked(False)  # sincronização externa não dispara o callback
+    menu.set_widget_checked(False)
     assert toggles == [True]
+    assert widget_toggles == [True]
     assert not menu.autostart.isChecked()
 
 
 def test_tray_is_optional_when_system_tray_is_unavailable(
     qt_app: QApplication, tmp_path: Path
 ) -> None:
-    app, _ = bootstrap(tmp_path, with_tray=True)
+    app, _ = bootstrap(tmp_path, with_ui=True)
 
     async def scenario() -> dict[str, str]:
         asyncio.get_running_loop().call_later(0.2, app.request_shutdown)

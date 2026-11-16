@@ -41,11 +41,19 @@ class TrayMenu:
         on_quit: Callable[[], None],
         on_toggle_autostart: Callable[[bool], None],
         data_dir: Path,
+        on_toggle_widget: Callable[[bool], None] | None = None,
     ) -> None:
         self.menu = QMenu()
         header = self.menu.addAction(f"ALFRED {__version__}")
         header.setEnabled(False)
         self.menu.addSeparator()
+
+        self.widget: QAction | None = None
+        if on_toggle_widget is not None:
+            self.widget = QAction("Mostrar widget", self.menu)
+            self.widget.setCheckable(True)
+            self.widget.toggled.connect(on_toggle_widget)
+            self.menu.addAction(self.widget)
 
         self.autostart = QAction("Iniciar com o Windows", self.menu)
         self.autostart.setCheckable(True)
@@ -62,9 +70,18 @@ class TrayMenu:
         self.quit.triggered.connect(on_quit)
 
     def set_autostart_checked(self, checked: bool) -> None:
-        blocked = self.autostart.blockSignals(True)
-        self.autostart.setChecked(checked)
-        self.autostart.blockSignals(blocked)
+        _set_checked_silently(self.autostart, checked)
+
+    def set_widget_checked(self, checked: bool) -> None:
+        if self.widget is not None:
+            _set_checked_silently(self.widget, checked)
+
+
+def _set_checked_silently(action: QAction, checked: bool) -> None:
+    """Sincroniza o estado sem disparar o callback (evita laço configuração ↔ menu)."""
+    blocked = action.blockSignals(True)
+    action.setChecked(checked)
+    action.blockSignals(blocked)
 
 
 class TrayModule(Module):
@@ -94,9 +111,11 @@ class TrayModule(Module):
         self._menu = TrayMenu(
             on_quit=self._on_quit,
             on_toggle_autostart=self._toggle_autostart,
+            on_toggle_widget=self._toggle_widget,
             data_dir=self._data_dir,
         )
         self._menu.set_autostart_checked(self._settings.current.general.start_with_windows)
+        self._menu.set_widget_checked(self._settings.current.appearance.widget_visible)
         self._icon = QSystemTrayIcon(alfred_icon())
         self._icon.setToolTip("ALFRED — Always at your service.")
         self._icon.setContextMenu(self._menu.menu)
@@ -119,19 +138,29 @@ class TrayModule(Module):
         self._menu = None
 
     def _toggle_autostart(self, checked: bool) -> None:
-        # Slot do Qt executado no loop asyncio (qasync): agenda a atualização da configuração.
-        task = asyncio.ensure_future(self._settings.update("general", start_with_windows=checked))
-        self._pending.add(task)
-        task.add_done_callback(self._on_toggle_done)
+        self._update_setting("general", start_with_windows=checked)
 
-    def _on_toggle_done(self, task: asyncio.Task[Settings]) -> None:
+    def _toggle_widget(self, checked: bool) -> None:
+        self._update_setting("appearance", widget_visible=checked)
+
+    def _update_setting(self, section: str, **changes: Any) -> None:
+        # Slot do Qt executado no loop asyncio (qasync): agenda a atualização da configuração.
+        task = asyncio.ensure_future(self._settings.update(section, **changes))
+        self._pending.add(task)
+        task.add_done_callback(self._on_update_done)
+
+    def _on_update_done(self, task: asyncio.Task[Settings]) -> None:
         self._pending.discard(task)
         if not task.cancelled() and task.exception() is not None:
-            logger.error("Falha ao alterar a inicialização automática", exc_info=task.exception())
+            logger.error("Falha ao alterar configuração pela bandeja", exc_info=task.exception())
 
     async def _on_settings_changed(self, event: SettingsChanged) -> None:
-        if self._menu is not None and event.section == "general":
+        if self._menu is None:
+            return
+        if event.section == "general":
             self._menu.set_autostart_checked(event.settings.general.start_with_windows)
+        elif event.section == "appearance":
+            self._menu.set_widget_checked(event.settings.appearance.widget_visible)
 
     async def _on_emergency(self, event: EmergencyStopped) -> None:
         if self._icon is not None:
