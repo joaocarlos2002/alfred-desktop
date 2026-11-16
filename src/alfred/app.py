@@ -114,6 +114,7 @@ def bootstrap(
     audio_backend: Any | None = None,
     app_lister: Any | None = None,
     ai_providers: tuple[Any, ...] = (),
+    credentials: Any | None = None,
     wake_loader: Any | None = None,
     stt_factory: Any | None = None,
     tts_builder: Any | None = None,
@@ -164,6 +165,17 @@ def bootstrap(
     ai_registry = ProviderRegistry()
     for provider in ai_providers:
         ai_registry.register(provider)
+    if credentials is not None:
+        from alfred.ai.openai_compat import OpenAICompatibleProvider
+
+        ai_registry.register(
+            OpenAICompatibleProvider(
+                "externo",
+                base_url=lambda: settings.current.ai.external_base_url,
+                credentials=credentials,
+                network_enabled=lambda: settings.current.privacy.network_enabled,
+            )
+        )
     ai = AIService(ai_registry, settings, bus)
 
     modules: list[Module] = [
