@@ -21,7 +21,7 @@ def matches_app(window: WindowInfo, app_name: str, normalize: Callable[[str], st
     wanted = normalize(app_name)
     return bool(wanted) and (
         wanted in normalize(window.title)
-        or wanted == normalize(window.process.removesuffix(".exe"))
+        or wanted == normalize(window.process).removesuffix(".exe")
     )
 
 
