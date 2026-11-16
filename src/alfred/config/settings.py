@@ -82,6 +82,14 @@ class VoiceSettings(Section):
     """Modelo de reconhecimento de fala: maior = mais preciso e mais lento."""
     stt_idle_unload_seconds: int = Field(default=120, ge=10, le=3600)
     """Libera o modelo de fala da memória após este tempo sem uso (segundos)."""
+    tts_engine: Literal["sapi", "piper"] = "sapi"
+    """Voz das respostas: Windows (SAPI, já instalada) ou Piper (neural, baixa ~63 MB)."""
+    tts_voice: str | None = None
+    """Voz específica (nome). Vazio: primeira voz em português disponível."""
+    tts_rate: int = Field(default=0, ge=-5, le=5)
+    """Velocidade da fala (-5 a 5)."""
+    tts_volume: int = Field(default=80, ge=0, le=100)
+    """Volume das respostas faladas (0 a 100)."""
 
 
 class CursorSettings(Section):

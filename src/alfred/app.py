@@ -106,6 +106,8 @@ def bootstrap(
     audio_backend: Any | None = None,
     wake_loader: Any | None = None,
     stt_factory: Any | None = None,
+    tts_builder: Any | None = None,
+    tts_output: Any | None = None,
     models_root: Path | None = None,
     with_ui: bool = False,
 ) -> tuple[Application, LoadResult]:
@@ -165,6 +167,18 @@ def bootstrap(
 
         stt = SpeechToText(stt_factory or faster_whisper_factory(models_root))
         modules.append(SpeechToTextModule(stt, settings, bus))
+        from alfred.voice.tts import TtsModule, default_builder
+
+        tts_kwargs = {"output_factory": tts_output} if tts_output is not None else {}
+        modules.append(
+            TtsModule(
+                settings,
+                bus,
+                tts_builder or default_builder(models_root),
+                devices=audio_backend,
+                **tts_kwargs,
+            )
+        )
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:

@@ -25,6 +25,8 @@ voice = [
     "sounddevice>=0.5",
     "vosk>=0.3.45",
     "faster-whisper>=1.1",
+    "piper-tts>=1.3",
+    "pywin32>=306; sys_platform == 'win32'",
 ]
 ai = []
 automation = []
@@ -89,7 +91,7 @@ module = ["alfred.domain.*", "alfred.core.*"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["qasync", "sounddevice", "vosk", "faster_whisper", "faster_whisper.*"]
+module = ["qasync", "sounddevice", "vosk", "faster_whisper", "faster_whisper.*", "piper", "piper.*", "win32com.*", "pythoncom"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- import-linter

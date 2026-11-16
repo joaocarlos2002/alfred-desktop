@@ -71,3 +71,43 @@ def ensure_model(spec: ModelSpec, root: Path, *, download: Downloader = urllib_d
         shutil.move(str(source), str(target))
     logger.info("Modelo '%s' pronto em %s", spec.name, target)
     return target
+
+
+@dataclass(frozen=True)
+class FileModelSpec:
+    """Modelo distribuído como arquivos soltos (ex.: vozes Piper: .onnx + .onnx.json)."""
+
+    name: str
+    files: tuple[tuple[str, str], ...]
+    """(url, nome do arquivo)."""
+    size_mb: int
+
+
+PIPER_PT_BR_FABER = FileModelSpec(
+    name="pt_BR-faber-medium",
+    files=tuple(
+        (
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/"
+            + filename,
+            filename,
+        )
+        for filename in ("pt_BR-faber-medium.onnx", "pt_BR-faber-medium.onnx.json")
+    ),
+    size_mb=63,
+)
+
+
+def ensure_files(
+    spec: FileModelSpec, root: Path, *, download: Downloader = urllib_download
+) -> Path:
+    """Baixa os arquivos que faltam (cada um de forma atômica) e devolve o diretório."""
+    root.mkdir(parents=True, exist_ok=True)
+    for url, filename in spec.files:
+        target = root / filename
+        if target.exists() and target.stat().st_size > 0:
+            continue
+        logger.info("Baixando '%s' (%s)", filename, spec.name)
+        partial = target.with_suffix(target.suffix + ".part")
+        download(url, partial)
+        partial.replace(target)
+    return root

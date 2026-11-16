@@ -18,3 +18,14 @@ class VoiceModelStatus(Event):
     model: str
     status: str  # downloading | ready | failed
     detail: str | None = None
+
+
+class SpeechStarted(Event):
+    """O ALFRED começou a falar."""
+
+    text: str
+
+
+class SpeechFinished(Event):
+    text: str
+    interrupted: bool
