@@ -129,15 +129,20 @@ class SqlTaskRepository(TaskRepository):
 
         return await self._db.run(work)
 
-    async def mark_interrupted(self, *, at: datetime) -> int:
-        def work(session: Session) -> int:
+    async def mark_interrupted(self, *, at: datetime) -> list[str]:
+        def work(session: Session) -> list[str]:
             running = session.scalars(
                 select(Task).where(Task.status == TaskStatus.RUNNING.value)
             ).all()
             for task in running:
-                task.status = TaskStatus.CANCELLED.value
+                task.status = TaskStatus.INTERRUPTED.value
                 task.error = "Interrompida: o ALFRED foi encerrado durante a execução"
                 task.finished_at = at
-            return len(running)
+            session.execute(
+                update(TaskStep)
+                .where(TaskStep.status == StepStatus.RUNNING.value)
+                .values(status=StepStatus.CANCELLED.value, error="interrompida", finished_at=at)
+            )
+            return [task.title for task in running]
 
         return await self._db.run(work)

@@ -23,6 +23,7 @@ from alfred.core.settings_service import SettingsService
 from alfred.domain.emergency import EmergencyStopped
 from alfred.domain.hotkeys import HotkeyAction, HotkeyRegistrationFailed
 from alfred.domain.module import Module
+from alfred.domain.tasks import TasksInterrupted
 from alfred.domain.triggers import TriggerBlocked
 from alfred.ui.icon import alfred_icon
 
@@ -162,6 +163,7 @@ class TrayModule(Module):
             ),
             self._bus.subscribe(EmergencyStopped, self._on_emergency, name="tray-emergency"),
             self._bus.subscribe(TriggerBlocked, self._on_trigger_blocked, name="tray-triggers"),
+            self._bus.subscribe(TasksInterrupted, self._on_interrupted, name="tray-interrupted"),
         ]
 
     async def stop(self) -> None:
@@ -216,6 +218,14 @@ class TrayModule(Module):
                 QSystemTrayIcon.MessageIcon.Information,
             )
 
+    async def _on_interrupted(self, event: TasksInterrupted) -> None:
+        if self._icon is not None:
+            self._icon.showMessage(
+                "Tarefas interrompidas",
+                interrupted_message(event),
+                QSystemTrayIcon.MessageIcon.Warning,
+            )
+
     async def _on_trigger_blocked(self, event: TriggerBlocked) -> None:
         if self._icon is not None:
             self._icon.showMessage(
@@ -231,6 +241,15 @@ class TrayModule(Module):
                 hotkey_failure_message(event),
                 QSystemTrayIcon.MessageIcon.Warning,
             )
+
+
+def interrupted_message(event: TasksInterrupted) -> str:
+    names = ", ".join(f"'{t[:40]}'" for t in event.titles[:3])
+    more = f" e mais {event.count - 3}" if event.count > 3 else ""
+    return (
+        f"{event.count} tarefa(s) ficaram pela metade quando o ALFRED foi encerrado: "
+        f"{names}{more}. Nada foi retomado automaticamente; peça de novo se quiser."
+    )
 
 
 def trigger_blocked_message(event: TriggerBlocked) -> str:

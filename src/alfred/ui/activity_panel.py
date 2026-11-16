@@ -64,12 +64,14 @@ STATUS_FILTERS: dict[str, TaskStatus | None] = {
     "Concluídas": TaskStatus.SUCCEEDED,
     "Com falha": TaskStatus.FAILED,
     "Canceladas": TaskStatus.CANCELLED,
+    "Interrompidas": TaskStatus.INTERRUPTED,
 }
 STATUS_LABELS = {
     "running": "Em execução",
     "succeeded": "Concluída",
     "failed": "Falhou",
     "cancelled": "Cancelada",
+    "interrupted": "Interrompida",
     "denied": "Recusada",
     "started": "Iniciada",
 }
@@ -79,6 +81,7 @@ STATUS_COLOR = {
     "failed": "error",
     "denied": "confirm",
     "cancelled": "text_muted",
+    "interrupted": "error",
     "started": "executing",
 }
 REFRESH_EVENTS = (

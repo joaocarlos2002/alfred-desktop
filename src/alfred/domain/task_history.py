@@ -73,6 +73,7 @@ class TaskRepository(Protocol):
         """Mais recentes primeiro, com as etapas."""
         ...
 
-    async def mark_interrupted(self, *, at: datetime) -> int:
-        """Marca como canceladas as tarefas que ficaram 'running' (ex.: após um crash)."""
+    async def mark_interrupted(self, *, at: datetime) -> list[str]:
+        """Marca como interrompidas as tarefas (e etapas) que ficaram 'running' após um
+        encerramento inesperado. Devolve os títulos das tarefas."""
         ...

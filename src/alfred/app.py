@@ -33,7 +33,7 @@ from alfred.core.tasks import TaskRegistry
 from alfred.core.tools import ToolRegistry
 from alfred.core.voice_commands import VoiceCommandHandler
 from alfred.domain.emergency import InputReleaser
-from alfred.domain.events import Event
+from alfred.domain.events import ApplicationStarted, Event
 from alfred.domain.hotkeys import HotkeyBackend
 from alfred.domain.module import Module
 from alfred.infrastructure.db.activity_repository import SqlActivityLogRepository
@@ -93,6 +93,7 @@ class Application:
                 logger.exception("ALFRED não pôde ser iniciado")
                 return EXIT_STARTUP_FAILED
             logger.info("ALFRED em execução")
+            await self.bus.publish(ApplicationStarted())
             try:
                 await self._shutdown.wait()
             finally:

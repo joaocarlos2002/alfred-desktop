@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 
 from alfred.core.event_bus import EventBus
 from alfred.core.permissions import PermissionService
+from alfred.core.recovery import GUIDANCE, ErrorKind, classify
 from alfred.core.scheduler import Step, StepScheduler, plan_batch
 from alfred.core.tasks import TaskRegistry
 from alfred.core.tools import ToolError, ToolRegistry
@@ -76,7 +77,13 @@ class Orchestrator(Module):
         speak: bool = True,
         context_provider: Callable[[], Awaitable[str]] | None = None,
         scheduler: StepScheduler | None = None,
+        max_step_retries: int = 2,
+        max_failures: int = 3,
+        backoff: float = 0.5,
     ) -> None:
+        self._max_step_retries = max_step_retries
+        self._max_failures = max_failures
+        self._backoff = backoff
         self._scheduler = scheduler or StepScheduler()
         self.context_provider = context_provider
         self._planner = planner
@@ -117,6 +124,7 @@ class Orchestrator(Module):
             ChatMessage(role="user", content=request),
         ]
         position = 0
+        failures = 0
         try:
             for _ in range(self._max_iterations):
                 response = await self._planner.chat(history, tools=self._tools.specs())
@@ -141,6 +149,24 @@ class Orchestrator(Module):
                     ),
                 )
                 position += len(calls)
+                failed = [
+                    r
+                    for r in results.values()
+                    if not r.get("ok") and r.get("tipo_erro") != ErrorKind.DENIED
+                ]
+                failures += len(failed)
+                if failures > self._max_failures:
+                    last = failed[-1].get("erro", "erro desconhecido")
+                    reply = (
+                        f"Não consegui concluir depois de {failures} tentativas que falharam. "
+                        f"Último erro: {last}"
+                    )
+                    await self._finish(
+                        task_id, TaskStatus.FAILED, reply, error="limite de replanejamentos"
+                    )
+                    return reply
+                for result in failed:
+                    result["replanejamentos_restantes"] = self._max_failures - failures
                 for step, call in zip(steps, calls, strict=True):
                     history.append(
                         ChatMessage(
@@ -182,25 +208,56 @@ class Orchestrator(Module):
         try:
             tool, params = self._tools.validate(call)
         except ToolError as exc:
-            return await self._step_failed(task_id, position, StepStatus.FAILED, str(exc))
+            return await self._step_failed(
+                task_id, position, StepStatus.FAILED, str(exc), kind=ErrorKind.PLAN
+            )
         summary = (
             f"{tool.description.rstrip('.')} — {json.dumps(call.arguments, ensure_ascii=False)}"
         )
         if not await self._permissions.authorize(tool, summary):
             return await self._step_failed(
-                task_id, position, StepStatus.DENIED, "ação não permitida pelo usuário"
+                task_id,
+                position,
+                StepStatus.DENIED,
+                "ação não permitida pelo usuário",
+                kind=ErrorKind.DENIED,
             )
-        try:
-            result = await self._tools.execute(call, params)
-        except asyncio.CancelledError:
-            await self._bus.publish(
-                TaskStepFinished(task_id=task_id, position=position, status=StepStatus.CANCELLED)
-            )
-            raise
-        except Exception as exc:  # erro da ferramenta volta ao modelo como resultado
-            return await self._step_failed(
-                task_id, position, StepStatus.FAILED, f"{type(exc).__name__}: {exc}"
-            )
+        attempt = 0
+        while True:
+            try:
+                result = await self._tools.execute(call, params, retry=attempt > 0)
+                break
+            except asyncio.CancelledError:
+                await self._bus.publish(
+                    TaskStepFinished(
+                        task_id=task_id, position=position, status=StepStatus.CANCELLED
+                    )
+                )
+                raise
+            except Exception as exc:  # erro da ferramenta volta ao modelo como resultado
+                verdict = classify(exc, idempotent=tool.idempotent)
+                if verdict.retry_safe and attempt < self._max_step_retries:
+                    attempt += 1
+                    delay = self._backoff * 2 ** (attempt - 1)
+                    logger.warning(
+                        "Etapa %d (%s) falhou de forma transitória (%s); nova tentativa %d "
+                        "em %.1f s",
+                        position,
+                        call.name,
+                        exc,
+                        attempt,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                return await self._step_failed(
+                    task_id,
+                    position,
+                    StepStatus.FAILED,
+                    f"{type(exc).__name__}: {exc}",
+                    kind=verdict.kind,
+                    attempts=attempt + 1,
+                )
         await self._bus.publish(
             TaskStepFinished(
                 task_id=task_id, position=position, status=StepStatus.SUCCEEDED, result=result
@@ -209,12 +266,27 @@ class Orchestrator(Module):
         return {"ok": True, **result}
 
     async def _step_failed(
-        self, task_id: UUID, position: int, status: StepStatus, error: str
+        self,
+        task_id: UUID,
+        position: int,
+        status: StepStatus,
+        error: str,
+        *,
+        kind: ErrorKind,
+        attempts: int = 1,
     ) -> dict[str, Any]:
         await self._bus.publish(
             TaskStepFinished(task_id=task_id, position=position, status=status, error=error)
         )
-        return {"ok": False, "erro": error}
+        result: dict[str, Any] = {
+            "ok": False,
+            "erro": error,
+            "tipo_erro": kind,
+            "orientacao": GUIDANCE[kind],
+        }
+        if attempts > 1:
+            result["tentativas"] = attempts
+        return result
 
     async def _finish(
         self, task_id: UUID, status: TaskStatus, reply: str, *, error: str | None = None

@@ -49,3 +49,7 @@ class Event(BaseModel):
 
 class Query[ResultT](Event):
     """Evento de request/response: tem exatamente um respondedor e devolve ``ResultT``."""
+
+
+class ApplicationStarted(Event):
+    """Todos os módulos foram iniciados (avisos que precisam da interface vêm depois)."""

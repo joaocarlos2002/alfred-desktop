@@ -24,6 +24,10 @@ OWN_INPUT_TOLERANCE_MS = 250
 class UserBusyError(RuntimeError):
     """O usuário continuou usando teclado/mouse; a ação foi abortada para não disputar com ele."""
 
+    transient = True
+    nothing_done = True
+    """Abortada antes de enviar qualquer tecla: seguro tentar de novo."""
+
 
 @dataclass
 class InputBackend:
