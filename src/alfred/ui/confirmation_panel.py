@@ -23,6 +23,7 @@ from alfred.domain.confirmation import (
     ConfirmationResolved,
 )
 from alfred.domain.module import Module
+from alfred.ui.assets import avatar_pixmap
 from alfred.ui.theme import THEME
 
 EDGE_MARGIN = 24
@@ -83,7 +84,15 @@ class ConfirmationPanel(QWidget):
         buttons.addWidget(self.deny)
         buttons.addWidget(self.approve)
 
-        for widget in (heading, self.action, self.target, self.impact, self.queued):
+        avatar = QLabel()
+        avatar.setPixmap(avatar_pixmap(36))
+        header = QHBoxLayout()
+        header.addWidget(avatar)
+        header.addSpacing(s.sm)
+        header.addWidget(heading)
+        header.addStretch()
+        layout.addLayout(header)
+        for widget in (self.action, self.target, self.impact, self.queued):
             layout.addWidget(widget)
         layout.addLayout(buttons)
 

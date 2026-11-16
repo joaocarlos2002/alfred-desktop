@@ -48,3 +48,10 @@ Escala de 4 px (`xs` 4, `sm` 8, `md` 12, `lg` 16, `xl` 24). Raios `sm` 6, `md` 1
 
 Monograma geométrico "A" em `accent` sobre círculo `obsidian`/`slate`, gerado em
 [`ui/icon.py`](../src/alfred/ui/icon.py) em todos os tamanhos.
+
+## Ilustração
+
+O mordomo ilustrado (`docs/images/Mordomo Elegante com Cloche e Tablet.png`) é usado como
+avatar circular nos cabeçalhos dos painéis e no estado vazio do painel de atividades. Os assets
+otimizados em `src/alfred/ui/assets/` são gerados por `uv run python scripts/build_assets.py`.
+Ícones pequenos (bandeja e widget, 16–56 px) usam o monograma, mais legível nesses tamanhos.

@@ -6,6 +6,7 @@ import asyncio
 import logging
 from collections.abc import Coroutine
 from typing import Any
+from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
@@ -15,12 +16,32 @@ class TaskRegistry:
 
     def __init__(self) -> None:
         self._tasks: set[asyncio.Task[Any]] = set()
+        self._by_id: dict[UUID, asyncio.Task[Any]] = {}
 
-    def spawn[T](self, coro: Coroutine[Any, Any, T], *, name: str) -> asyncio.Task[T]:
+    def spawn[T](
+        self, coro: Coroutine[Any, Any, T], *, name: str, task_id: UUID | None = None
+    ) -> asyncio.Task[T]:
+        """``task_id`` liga a tarefa assíncrona à tarefa do domínio, para cancelamento pela UI."""
         task = asyncio.create_task(coro, name=name)
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+        if task_id is not None:
+            self._by_id[task_id] = task
+            task.add_done_callback(lambda _: self._by_id.pop(task_id, None))
         return task
+
+    def is_running(self, task_id: UUID) -> bool:
+        task = self._by_id.get(task_id)
+        return task is not None and not task.done()
+
+    def cancel(self, task_id: UUID) -> bool:
+        """Cancela uma tarefa específica. Devolve ``False`` se ela não está em execução."""
+        task = self._by_id.get(task_id)
+        if task is None or task.done():
+            return False
+        task.cancel()
+        logger.info("Tarefa '%s' cancelada pelo usuário", task.get_name())
+        return True
 
     @property
     def running(self) -> int:

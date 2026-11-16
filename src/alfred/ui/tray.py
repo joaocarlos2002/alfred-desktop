@@ -42,11 +42,17 @@ class TrayMenu:
         on_toggle_autostart: Callable[[bool], None],
         data_dir: Path,
         on_toggle_widget: Callable[[bool], None] | None = None,
+        on_open_panel: Callable[[], None] | None = None,
     ) -> None:
         self.menu = QMenu()
         header = self.menu.addAction(f"ALFRED {__version__}")
         header.setEnabled(False)
         self.menu.addSeparator()
+
+        self.panel: QAction | None = None
+        if on_open_panel is not None:
+            self.panel = self.menu.addAction("Painel de atividades")
+            self.panel.triggered.connect(on_open_panel)
 
         self.widget: QAction | None = None
         if on_toggle_widget is not None:
@@ -96,8 +102,10 @@ class TrayModule(Module):
         settings: SettingsService,
         data_dir: Path,
         on_quit: Callable[[], None],
+        on_open_panel: Callable[[], None] | None = None,
     ) -> None:
         self._bus = bus
+        self._on_open_panel = on_open_panel
         self._settings = settings
         self._data_dir = data_dir
         self._on_quit = on_quit
@@ -112,6 +120,7 @@ class TrayModule(Module):
             on_quit=self._on_quit,
             on_toggle_autostart=self._toggle_autostart,
             on_toggle_widget=self._toggle_widget,
+            on_open_panel=self._on_open_panel,
             data_dir=self._data_dir,
         )
         self._menu.set_autostart_checked(self._settings.current.general.start_with_windows)

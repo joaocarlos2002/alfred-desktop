@@ -1,5 +1,9 @@
 # ALFRED — Desktop AI Assistant
 
+<p align="center">
+  <img src="docs/images/Mordomo%20Elegante%20com%20Cloche%20e%20Tablet.png" alt="ALFRED" width="260">
+</p>
+
 > *Always at your service.*
 
 Assistente pessoal de inteligência artificial para **Windows 11**: roda em segundo plano,
