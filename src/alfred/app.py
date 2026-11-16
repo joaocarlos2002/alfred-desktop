@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from types import FrameType
+from typing import Any
 
 from alfred.config.events import SettingsChanged
 from alfred.config.settings import LoggingSettings
@@ -102,6 +103,7 @@ def bootstrap(
     autostart: AutostartBackend | None = None,
     hotkeys: HotkeyBackend | None = None,
     input_releaser: InputReleaser | None = None,
+    audio_backend: Any | None = None,
     with_ui: bool = False,
 ) -> tuple[Application, LoadResult]:
     """Monta a aplicação padrão a partir do diretório de dados.
@@ -143,6 +145,14 @@ def bootstrap(
         AssistantStateService(bus),
         TaskTracker(bus, task_history),
     ]
+    if audio_backend is not None:
+        from alfred.voice.capture import AudioCapture
+        from alfred.voice.module import AudioModule
+
+        capture = AudioCapture(audio_backend)
+        audio = AudioModule(capture, settings, bus)
+        capture._on_device_change = audio.notify_device_change
+        modules.append(audio)
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:

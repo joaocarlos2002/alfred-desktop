@@ -20,7 +20,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-voice = []
+voice = [
+    "numpy>=2.0",
+    "sounddevice>=0.5",
+]
 ai = []
 automation = []
 
@@ -84,7 +87,7 @@ module = ["alfred.domain.*", "alfred.core.*"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["qasync"]
+module = ["qasync", "sounddevice"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- import-linter

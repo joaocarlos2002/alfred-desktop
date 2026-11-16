@@ -17,6 +17,7 @@ from alfred.infrastructure.input_release import Win32InputReleaser
 from alfred.infrastructure.logging_setup import configure_logging
 from alfred.infrastructure.paths import data_dir, logs_dir
 from alfred.infrastructure.single_instance import SingleInstance
+from alfred.voice.devices import SoundDeviceBackend
 
 logger = logging.getLogger("alfred")
 
@@ -51,6 +52,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             autostart=Autostart(),
             hotkeys=Win32HotkeyListener(),
             input_releaser=Win32InputReleaser(),
+            audio_backend=SoundDeviceBackend(),
             with_ui=not args.headless,
         )
         options = logging_options(

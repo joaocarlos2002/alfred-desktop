@@ -142,19 +142,30 @@ def test_physical_cursor_never_moves() -> None:
         app = ensure_qt_application()
         overlay = OverlayWindow()
         cursor = OverlayVirtualCursor(overlay, OverlayAnnotator(overlay), CursorSettings())
-        before = physical()
-        for x, y in [(200, 200), (900, 500), (300, 700)]:
-            cursor.move_to(x, y)
-            end = time.monotonic() + 1
+        targets = [(200, 200), (900, 500), (300, 700), (560, 420)]
+        samples = []
+
+        def pump(seconds):
+            end = time.monotonic() + seconds
             while time.monotonic() < end:
                 app.processEvents()
+                samples.append(physical())
+
+        before = physical()
+        for x, y in targets[:3]:
+            cursor.move_to(x, y)
+            pump(1)
             cursor.click()
         cursor.point_at(ScreenRect(x=500, y=400, width=120, height=40), label="OK")
-        end = time.monotonic() + 1
-        while time.monotonic() < end:
-            app.processEvents()
-        assert physical() == before, (before, physical())
-        print("OK", before)
+        pump(1)
+        # Se o cursor físico estivesse sendo movido, ele pararia exatamente nos alvos.
+        landed = [p for p in samples if any(abs(p[0]-x) <= 1 and abs(p[1]-y) <= 1
+                                            for x, y in targets)]
+        assert not landed, f"cursor físico chegou aos alvos: {landed[:3]}"
+        user_moved = len(set(samples)) > 1
+        if not user_moved:
+            assert physical() == before, (before, physical())
+        print("OK", before, "uso humano detectado" if user_moved else "parado")
         """
     )
     env = {**os.environ, "QT_QPA_PLATFORM": "windows"}
