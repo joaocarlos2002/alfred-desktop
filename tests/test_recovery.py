@@ -63,7 +63,9 @@ class Permissions:
     def __init__(self, deny: set[str] | None = None) -> None:
         self.deny = deny or set()
 
-    async def authorize(self, tool: Tool, summary: str, target: str = "") -> bool:
+    async def authorize(
+        self, tool: Tool, summary: str, target: str = "", *, escalate: str | None = None
+    ) -> bool:
         return tool.name not in self.deny
 
 

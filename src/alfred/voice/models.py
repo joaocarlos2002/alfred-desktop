@@ -1,7 +1,12 @@
-"""Download sob demanda de modelos de voz para ``data/models``."""
+"""Download sob demanda de modelos de voz para ``data/models``.
+
+Todo arquivo baixado tem o SHA-256 conferido antes de ser instalado (cadeia de suprimentos,
+docs/security/threat-model.md): um download corrompido ou adulterado é descartado.
+"""
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import shutil
 import tempfile
@@ -23,6 +28,32 @@ class ModelSpec:
     required: tuple[str, ...]
     """Arquivos que precisam existir após a extração (verificação de integridade básica)."""
     size_mb: int
+    sha256: str | None = None
+    """Hash do pacote baixado (None só em testes com pacotes gerados na hora)."""
+
+
+class IntegrityError(RuntimeError):
+    """O arquivo baixado não tem o hash esperado."""
+
+
+def sha256_of(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify(path: Path, expected: str | None, label: str) -> None:
+    if expected is None:
+        return
+    actual = sha256_of(path)
+    if actual != expected.lower():
+        path.unlink(missing_ok=True)
+        raise IntegrityError(
+            f"'{label}' baixado com hash inesperado (esperado {expected[:12]}…, "
+            f"obtido {actual[:12]}…); arquivo descartado"
+        )
 
 
 VOSK_SMALL_PT = ModelSpec(
@@ -30,6 +61,7 @@ VOSK_SMALL_PT = ModelSpec(
     url="https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip",
     required=("final.mdl", "HCLr.fst", "Gr.fst", "mfcc.conf"),
     size_mb=31,
+    sha256="6e1ce909032e1afa7a88e68a3d628ecafff302bdf195befab308826c395e93b7",
 )
 
 
@@ -53,6 +85,7 @@ def ensure_model(spec: ModelSpec, root: Path, *, download: Downloader = urllib_d
     with tempfile.TemporaryDirectory(dir=root, prefix=".download-") as tmp:
         archive = Path(tmp) / "model.zip"
         download(spec.url, archive)
+        verify(archive, spec.sha256, spec.name)
         extract_dir = (Path(tmp) / "extracted").resolve()
         with zipfile.ZipFile(archive) as zf:
             for member in zf.namelist():
@@ -78,20 +111,26 @@ class FileModelSpec:
     """Modelo distribuído como arquivos soltos (ex.: vozes Piper: .onnx + .onnx.json)."""
 
     name: str
-    files: tuple[tuple[str, str], ...]
-    """(url, nome do arquivo)."""
+    files: tuple[tuple[str, str] | tuple[str, str, str], ...]
+    """(url, nome do arquivo[, sha256])."""
     size_mb: int
 
 
+_PIPER_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/"
+
 PIPER_PT_BR_FABER = FileModelSpec(
     name="pt_BR-faber-medium",
-    files=tuple(
+    files=(
         (
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/"
-            + filename,
-            filename,
-        )
-        for filename in ("pt_BR-faber-medium.onnx", "pt_BR-faber-medium.onnx.json")
+            _PIPER_BASE + "pt_BR-faber-medium.onnx",
+            "pt_BR-faber-medium.onnx",
+            "75e913eb463db0b6ac7ddf68d3e4c9ac19ace36dc3b710a81039b448352b8ffc",
+        ),
+        (
+            _PIPER_BASE + "pt_BR-faber-medium.onnx.json",
+            "pt_BR-faber-medium.onnx.json",
+            "fa8a8fecb01ae198bc416381e368d3206f85bad1449a0f11e1f6a9edf85a32f1",
+        ),
     ),
     size_mb=63,
 )
@@ -102,12 +141,13 @@ def ensure_files(
 ) -> Path:
     """Baixa os arquivos que faltam (cada um de forma atômica) e devolve o diretório."""
     root.mkdir(parents=True, exist_ok=True)
-    for url, filename in spec.files:
+    for url, filename, *expected in spec.files:
         target = root / filename
         if target.exists() and target.stat().st_size > 0:
             continue
         logger.info("Baixando '%s' (%s)", filename, spec.name)
         partial = target.with_suffix(target.suffix + ".part")
         download(url, partial)
+        verify(partial, expected[0] if expected else None, filename)
         partial.replace(target)
     return root

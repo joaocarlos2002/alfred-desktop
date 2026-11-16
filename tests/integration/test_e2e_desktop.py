@@ -40,7 +40,14 @@ class MemoryActivity:
 
 
 class Allow:
-    async def authorize(self, *args: object, **kwargs: object) -> bool:
+    """Aprova como o usuário faria na confirmação, anotando o que foi escalonado."""
+
+    def __init__(self) -> None:
+        self.escalated: list[str] = []
+
+    async def authorize(self, tool: Any, summary: str, target: str = "", **kw: Any) -> bool:
+        if kw.get("escalate"):
+            self.escalated.append(tool.name)
         return True
 
 
@@ -112,7 +119,8 @@ async def test_orchestrator_moves_data_between_two_real_applications(
     tools.allow_only({"ler_elemento", "preencher_elemento", "clicar_elemento"})
 
     def copy_step(messages: list[ChatMessage], _: Any) -> ChatMessage:
-        text = _last_tool_result(messages)["texto"]  # o plano usa o resultado real da leitura
+        # o plano usa o resultado real da leitura (marcado como conteúdo externo)
+        text = _last_tool_result(messages)["conteudo_externo"]["texto"]
         return ChatMessage(
             role="assistant",
             tool_calls=(
@@ -135,7 +143,8 @@ async def test_orchestrator_moves_data_between_two_real_applications(
         )
 
     def final(messages: list[ChatMessage], _: Any) -> ChatMessage:
-        return ChatMessage(role="assistant", content=_last_tool_result(messages)["texto"])
+        result = _last_tool_result(messages)["conteudo_externo"]["texto"]
+        return ChatMessage(role="assistant", content=result)
 
     provider = FakeProvider(
         replies=[
@@ -153,13 +162,14 @@ async def test_orchestrator_moves_data_between_two_real_applications(
             final,
         ]
     )
+    permissions = Allow()
     bus = EventBus()
     await bus.start()
     try:
         orchestrator = Orchestrator(
             Planner(provider),  # type: ignore[arg-type]
             tools,
-            Allow(),  # type: ignore[arg-type]
+            permissions,  # type: ignore[arg-type]
             TaskRegistry(),
             bus,
             speak=False,
@@ -171,3 +181,5 @@ async def test_orchestrator_moves_data_between_two_real_applications(
         await bus.stop()
     tag = source.rsplit(" ", 1)[-1]
     assert reply == f"recebido: pedido {tag}"  # lido de volta da aplicação de destino
+    # depois de ler conteúdo de outra aplicação, as ações pediram confirmação (anti-injection)
+    assert permissions.escalated == ["preencher_elemento", "clicar_elemento"]

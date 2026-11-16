@@ -1,0 +1,10 @@
+# Regras padrão do gitleaks, sem os valores fictícios usados nos testes.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Credenciais fictícias dos testes (nunca válidas)"
+regexes = [
+  '''sk-teste-[0-9a-z]+''',
+  '''hunter2''',
+]

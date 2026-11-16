@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -14,6 +15,26 @@ from alfred.automation.uia_service import UiaService
 from alfred.automation.window_service import WindowService
 from alfred.core.scheduler import INPUT
 from alfred.core.tools import Risk, Tool, ToolRegistry
+
+SHELL_APPS = re.compile(
+    r"\b(cmd|prompt de comando|command prompt|powershell|pwsh|terminal|windows terminal|wt|"
+    r"regedit|editor do registro|registry editor|gpedit|mmc|services|servi[cç]os|taskschd|"
+    r"agendador de tarefas|wscript|cscript|mshta|bash|wsl)(\.exe)?\b",
+    re.IGNORECASE,
+)
+"""Interpretadores de comando e ferramentas administrativas: abrir exige confirmação sempre."""
+
+
+def _shell_app(p: AppParams) -> str | None:
+    if SHELL_APPS.search(p.nome):
+        return f"'{p.nome}' executa comandos ou altera o sistema. Abra só se foi você quem pediu."
+    return None
+
+
+def _local_file(p: UrlParams) -> str | None:
+    if p.url.lower().startswith("file:"):
+        return "Abrir um arquivo local no navegador expõe o conteúdo dele ao assistente."
+    return None
 
 
 class AppParams(BaseModel):
@@ -115,6 +136,7 @@ def register_automation_tools(
             open_app,
             "applications",
             resource=INPUT,
+            needs_confirmation=_shell_app,
         ),
         Tool(
             "fechar_aplicativo",
@@ -164,6 +186,7 @@ def register_automation_tools(
             "ui",
             risk=Risk.READ,
             idempotent=True,
+            untrusted_output=True,
         ),
         Tool(
             "descrever_janela",
@@ -173,6 +196,7 @@ def register_automation_tools(
             "ui",
             risk=Risk.READ,
             idempotent=True,
+            untrusted_output=True,
         ),
         Tool(
             "digitar_texto",
@@ -197,6 +221,7 @@ def register_automation_tools(
             navigate,
             "browser",
             resource="browser",
+            needs_confirmation=_local_file,
         ),
         Tool(
             "ler_pagina",
@@ -207,6 +232,7 @@ def register_automation_tools(
             risk=Risk.READ,
             idempotent=True,
             resource="browser",
+            untrusted_output=True,
         ),
     ]
     for tool in tools:
