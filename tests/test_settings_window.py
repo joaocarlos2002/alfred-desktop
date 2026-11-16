@@ -128,3 +128,41 @@ def test_module_refreshes_form_on_external_change(qt_app: QApplication, tmp_path
         return bool(visible)
 
     assert run_on_qt(scenario()) is False
+
+
+def test_memory_and_triggers_sections_are_wired_in_the_real_app(
+    qt_app: QApplication, tmp_path: Path
+) -> None:
+    from alfred.ui.settings_window import MemorySection, TriggersSection
+
+    app, _ = bootstrap(tmp_path, with_ui=True)
+    module = app.manager._modules["settings_window"]
+    assert isinstance(module, SettingsWindowModule)
+
+    async def scenario() -> tuple[list[str], list[str]]:
+        await app.manager.start_all()
+        module.show()
+        window = module.window
+        assert window is not None
+        memory = window.findChild(MemorySection)
+        triggers = window.findChild(TriggersSection)
+        assert memory is not None
+        assert triggers is not None
+        memory.new_item.setText("Prefiro respostas curtas")
+        await memory._add()
+        triggers.name.setText("Bom dia")
+        triggers.kind.setCurrentIndex(triggers.kind.findData("schedule"))
+        triggers.source.setText("0 8 * * 1-5")
+        triggers.request.setText("leia minha agenda")
+        await triggers._save()
+        remembered = [m.content for m in await app.memory.memories()]
+        saved = [t.name for t in await app.triggers.triggers()]
+        triggers.source.setText("todo dia")
+        await triggers._save()
+        assert "5 campos" in triggers.feedback.text()
+        await app.manager.stop_all()
+        return remembered, saved
+
+    remembered, saved = run_on_qt(scenario())
+    assert remembered == ["Prefiro respostas curtas"]
+    assert saved == ["Bom dia"]

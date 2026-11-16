@@ -60,6 +60,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ai_providers=(OllamaProvider(),),
             credentials=CredentialStore(),
             with_ui=not args.headless,
+            system_observers=True,
         )
         options = logging_options(
             loaded.settings.logging, logs_dir(), level_override=args.log_level

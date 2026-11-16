@@ -25,9 +25,19 @@ class CommandRegistry:
     def __init__(self) -> None:
         self._handlers: list[tuple[re.Pattern[str], CommandHandler]] = []
 
-    def register(self, pattern: str | re.Pattern[str], handler: CommandHandler) -> None:
+    def register(
+        self, pattern: str | re.Pattern[str], handler: CommandHandler
+    ) -> Callable[[], None]:
+        """Registra e devolve uma função que remove o registro (ex.: gatilhos editados)."""
         compiled = re.compile(pattern, re.IGNORECASE) if isinstance(pattern, str) else pattern
-        self._handlers.append((compiled, handler))
+        entry = (compiled, handler)
+        self._handlers.append(entry)
+
+        def remove() -> None:
+            if entry in self._handlers:
+                self._handlers.remove(entry)
+
+        return remove
 
     def match(self, command: str) -> tuple[re.Match[str], CommandHandler] | None:
         for pattern, handler in self._handlers:

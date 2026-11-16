@@ -84,6 +84,16 @@ class HotkeyService(Module):
             )
         return Health(status=HealthStatus.HEALTHY)
 
+    async def register_extra(self, hotkey: str, callback: Callable[[], None]) -> int:
+        """Atalho adicional (ex.: gatilhos). ``callback`` roda na thread do backend.
+
+        Raises: ValueError, HotkeyConflictError.
+        """
+        return await asyncio.to_thread(self._backend.register, hotkey, callback)
+
+    async def unregister_extra(self, hotkey_id: int) -> None:
+        await asyncio.to_thread(self._backend.unregister, hotkey_id)
+
     # ------------------------------------------------------------------ internos
     async def _on_settings_changed(self, event: SettingsChanged) -> None:
         if event.section != "activation":
