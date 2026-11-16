@@ -23,6 +23,7 @@ from alfred.core.settings_service import SettingsService
 from alfred.domain.emergency import EmergencyStopped
 from alfred.domain.hotkeys import HotkeyAction, HotkeyRegistrationFailed
 from alfred.domain.module import Module
+from alfred.domain.triggers import TriggerBlocked
 from alfred.ui.icon import alfred_icon
 
 logger = logging.getLogger(__name__)
@@ -160,6 +161,7 @@ class TrayModule(Module):
                 HotkeyRegistrationFailed, self._on_hotkey_failed, name="tray-hotkeys"
             ),
             self._bus.subscribe(EmergencyStopped, self._on_emergency, name="tray-emergency"),
+            self._bus.subscribe(TriggerBlocked, self._on_trigger_blocked, name="tray-triggers"),
         ]
 
     async def stop(self) -> None:
@@ -214,6 +216,14 @@ class TrayModule(Module):
                 QSystemTrayIcon.MessageIcon.Information,
             )
 
+    async def _on_trigger_blocked(self, event: TriggerBlocked) -> None:
+        if self._icon is not None:
+            self._icon.showMessage(
+                "Gatilho bloqueado",
+                trigger_blocked_message(event),
+                QSystemTrayIcon.MessageIcon.Warning,
+            )
+
     async def _on_hotkey_failed(self, event: HotkeyRegistrationFailed) -> None:
         if self._icon is not None:
             self._icon.showMessage(
@@ -221,6 +231,10 @@ class TrayModule(Module):
                 hotkey_failure_message(event),
                 QSystemTrayIcon.MessageIcon.Warning,
             )
+
+
+def trigger_blocked_message(event: TriggerBlocked) -> str:
+    return f"O gatilho '{event.name}' não foi executado: {event.reason}."
 
 
 def emergency_message(event: EmergencyStopped) -> str:

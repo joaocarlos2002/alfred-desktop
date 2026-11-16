@@ -26,10 +26,17 @@ from alfred.core.commands import CommandRegistry, CommandResult
 from alfred.core.event_bus import EventBus, Subscription
 from alfred.core.voice_commands import normalize
 from alfred.domain.module import Health, HealthStatus, Module
-from alfred.domain.tasks import TaskFinished
-from alfred.domain.triggers import SYSTEM_EVENTS, TriggerFired, TriggerSkipped, TriggerSpec
+from alfred.domain.tasks import TaskFinished, TaskStatus
+from alfred.domain.triggers import (
+    SYSTEM_EVENTS,
+    TriggerBlocked,
+    TriggerFired,
+    TriggerSkipped,
+    TriggerSpec,
+)
 from alfred.infrastructure.db.trigger_repository import ExecutionRecord
 from alfred.triggers.cron import Cron, CronError
+from alfred.triggers.guard import TriggerGuard
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +143,10 @@ class TriggerEngine(Module):
         power: Callable[[], PowerState | None] | None = power_state,
         clock: Callable[[], datetime] = datetime.now,
         poll_seconds: float = POLL_SECONDS,
+        guard: TriggerGuard | None = None,
     ) -> None:
+        self.guard = guard or TriggerGuard()
+        self.guard.names = self._name_of
         self._store = store
         self._bus = bus
         self._submit = submit
@@ -167,6 +177,7 @@ class TriggerEngine(Module):
             logger.warning("%d execução(ões) de gatilho interrompidas antes", interrupted)
         self._subscription = self._bus.subscribe(TaskFinished, self._on_finished, name="triggers")
         await self.reload()
+        await self._restore_breakers()
         self._loops = [
             asyncio.create_task(self._schedule_loop(), name="gatilhos:horario"),
             asyncio.create_task(self._poll_loop(), name="gatilhos:observacao"),
@@ -190,6 +201,24 @@ class TriggerEngine(Module):
             names = ", ".join(self._triggers[i].name for i in self.problems if i in self._triggers)
             return Health(status=HealthStatus.DEGRADED, detail=f"gatilhos inativos: {names}")
         return Health(status=HealthStatus.HEALTHY, detail=f"{len(self._triggers)} gatilho(s)")
+
+    def _name_of(self, trigger_id: int) -> str:
+        spec = self._triggers.get(trigger_id)
+        return spec.name if spec is not None else f"#{trigger_id}"
+
+    async def _restore_breakers(self) -> None:
+        needed = self.guard.limits.breaker_failures
+        for trigger_id in self._triggers:
+            recent = await self._store.executions(trigger_id, limit=needed * 10)
+            consecutive = 0
+            for record in recent:
+                if record.status == "blocked":  # bloqueios não são execuções
+                    continue
+                if record.status != TaskStatus.FAILED.value or consecutive >= needed:
+                    break
+                consecutive += 1
+            if consecutive:
+                self.guard.restore_failures(trigger_id, consecutive)
 
     # ------------------------------------------------------------------ CRUD
     async def triggers(self) -> list[TriggerSpec]:
@@ -283,11 +312,15 @@ class TriggerEngine(Module):
             return await self._skip(spec, "gatilho desabilitado")
         if not spec.condition.allows(self._clock()):
             return await self._skip(spec, "fora da condição de horário/dia")
+        verdict = self.guard.check(spec.id, spec.kind)
+        if not verdict.allowed:
+            return await self._block(spec, verdict.reason or "bloqueado")
         if any(tid == spec.id for tid, _ in self._running.values()):
             return await self._skip(spec, "execução anterior ainda em andamento")
         execution_id = await self._store.start_execution(spec.id)
         task_id = uuid4()
         self._running[task_id] = (spec.id, execution_id)
+        self.guard.started(task_id, spec.id, verdict.chain)
         await self._bus.publish(
             TriggerFired(trigger_id=spec.id, name=spec.name, kind=spec.kind, detail=detail)
         )
@@ -300,6 +333,15 @@ class TriggerEngine(Module):
             raise
         return True
 
+    async def _block(self, spec: TriggerSpec, reason: str) -> bool:
+        """Proteção acionada: registra no histórico de execuções e notifica o usuário."""
+        assert spec.id is not None
+        logger.warning("Gatilho '%s' bloqueado: %s", spec.name, reason)
+        execution_id = await self._store.start_execution(spec.id)
+        await self._store.finish_execution(execution_id, "blocked", error=reason)
+        await self._bus.publish(TriggerBlocked(trigger_id=spec.id, name=spec.name, reason=reason))
+        return False
+
     async def _skip(self, spec: TriggerSpec, reason: str) -> bool:
         assert spec.id is not None
         logger.info("Gatilho '%s' não disparou: %s", spec.name, reason)
@@ -310,10 +352,18 @@ class TriggerEngine(Module):
         found = self._running.pop(event.task_id, None)
         if found is None:
             return
-        _, execution_id = found
+        trigger_id, execution_id = found
         await self._store.finish_execution(
             execution_id, event.status.value, error=event.error, task_id=event.task_id
         )
+        if self.guard.finished(event.task_id, failed=event.status is TaskStatus.FAILED):
+            name = self._name_of(trigger_id)
+            reason = (
+                f"suspenso após {self.guard.limits.breaker_failures} falhas seguidas; "
+                f"volta em {self.guard.limits.breaker_cooldown_seconds / 60:.0f} min"
+            )
+            logger.warning("Gatilho '%s' %s", name, reason)
+            await self._bus.publish(TriggerBlocked(trigger_id=trigger_id, name=name, reason=reason))
 
     # ------------------------------------------------------------------ horário
     async def _schedule_loop(self) -> None:

@@ -105,6 +105,14 @@ class TriggerFired(Event):
     detail: str = ""
 
 
+class TriggerBlocked(Event):
+    """Disparo barrado por uma proteção (ciclo, frequência, cadeia, falhas seguidas)."""
+
+    trigger_id: int
+    name: str
+    reason: str
+
+
 class TriggerSkipped(Event):
     trigger_id: int
     name: str
