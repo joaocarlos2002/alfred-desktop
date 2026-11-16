@@ -30,7 +30,7 @@ async def test_success_is_recorded_with_duration_result_and_correlation(
     cid = uuid4()
     with correlation_scope(cid):
         async with action_log.record("automation", "open_app", params={"app": "Calc"}) as rec:
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.05)
             rec.result = {"pid": 42}
 
     (entry,) = await repo.list()
@@ -38,7 +38,8 @@ async def test_success_is_recorded_with_duration_result_and_correlation(
     assert entry.correlation_id == cid
     assert entry.detail["params"] == {"app": "Calc"}
     assert entry.detail["result"] == {"pid": 42}
-    assert entry.detail["duration_ms"] >= 10
+    # Margem folgada: a resolução do timer no Windows é de ~15 ms.
+    assert entry.detail["duration_ms"] >= 25
 
 
 async def test_failure_cancellation_and_denial(
