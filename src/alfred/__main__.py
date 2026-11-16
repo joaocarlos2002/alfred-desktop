@@ -13,6 +13,7 @@ from alfred import __version__
 from alfred.app import EXIT_ALREADY_RUNNING, bootstrap, logging_options
 from alfred.infrastructure.autostart import Autostart
 from alfred.infrastructure.hotkeys import Win32HotkeyListener
+from alfred.infrastructure.input_release import Win32InputReleaser
 from alfred.infrastructure.logging_setup import configure_logging
 from alfred.infrastructure.paths import data_dir, logs_dir
 from alfred.infrastructure.single_instance import SingleInstance
@@ -49,6 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             data_dir(),
             autostart=Autostart(),
             hotkeys=Win32HotkeyListener(),
+            input_releaser=Win32InputReleaser(),
             with_tray=not args.headless,
         )
         options = logging_options(

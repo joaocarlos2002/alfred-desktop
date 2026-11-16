@@ -14,13 +14,17 @@ from alfred.config.events import SettingsChanged
 from alfred.config.settings import LoggingSettings
 from alfred.config.store import SETTINGS_FILE, LoadResult, SettingsStore
 from alfred.core.autostart_service import AutostartBackend, AutostartService
+from alfred.core.emergency import EmergencyStop
 from alfred.core.event_bus import EventBus
 from alfred.core.hotkey_service import HotkeyService
 from alfred.core.lifecycle import ModuleManager, StartupError
 from alfred.core.settings_service import SettingsService
+from alfred.core.tasks import TaskRegistry
+from alfred.domain.emergency import InputReleaser
 from alfred.domain.events import Event
 from alfred.domain.hotkeys import HotkeyBackend
 from alfred.domain.module import Module
+from alfred.infrastructure.db.activity_repository import SqlActivityLogRepository
 from alfred.infrastructure.db.database import DB_FILE, Database
 from alfred.infrastructure.logging_setup import LoggingOptions, apply_levels
 
@@ -43,6 +47,8 @@ class Application:
         self.bus = bus
         self.settings: SettingsService | None = None
         self.database: Database | None = None
+        self.tasks: TaskRegistry | None = None
+        self.emergency: EmergencyStop | None = None
         self._shutdown = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -88,6 +94,7 @@ def bootstrap(
     *,
     autostart: AutostartBackend | None = None,
     hotkeys: HotkeyBackend | None = None,
+    input_releaser: InputReleaser | None = None,
     with_tray: bool = False,
 ) -> tuple[Application, LoadResult]:
     """Monta a aplicação padrão a partir do diretório de dados.
@@ -95,8 +102,9 @@ def bootstrap(
     As configurações são carregadas de forma síncrona, antes do logging, para que o logging já
     nasça configurado; os avisos do carregamento vêm em ``LoadResult.warnings``.
 
-    ``autostart``, ``hotkeys`` e ``with_tray`` só são ligados pelo executável real, para que
-    testes nunca toquem no registro do Windows, nos atalhos globais nem na bandeja do sistema.
+    ``autostart``, ``hotkeys``, ``input_releaser`` e ``with_tray`` só são ligados pelo executável
+    real, para que testes nunca toquem no registro do Windows, nos atalhos globais, no teclado e
+    mouse nem na bandeja do sistema.
     """
     store = SettingsStore(data_root / SETTINGS_FILE)
     loaded = store.load()
@@ -110,14 +118,25 @@ def bootstrap(
 
     bus.subscribe(SettingsChanged, on_settings_changed, name="logging-levels")
     database = Database(data_root / DB_FILE)
-    modules: list[Module] = [settings, database]
+    tasks = TaskRegistry()
+    emergency = EmergencyStop(
+        tasks,
+        bus,
+        input_releaser=input_releaser,
+        activity=SqlActivityLogRepository(database),
+    )
+    modules: list[Module] = [settings, database, emergency]
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
-        modules.append(HotkeyService(hotkeys, settings, bus))
+        modules.append(
+            HotkeyService(hotkeys, settings, bus, on_emergency=emergency.trigger_threadsafe)
+        )
     app = create_application(modules, bus=bus)
     app.settings = settings
     app.database = database
+    app.tasks = tasks
+    app.emergency = emergency
     if with_tray:
         from alfred.ui.tray import TrayModule
 

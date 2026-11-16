@@ -20,6 +20,7 @@ from alfred.config.events import SettingsChanged
 from alfred.config.settings import Settings
 from alfred.core.event_bus import EventBus, Subscription
 from alfred.core.settings_service import SettingsService
+from alfred.domain.emergency import EmergencyStopped
 from alfred.domain.hotkeys import HotkeyAction, HotkeyRegistrationFailed
 from alfred.domain.module import Module
 from alfred.ui.icon import alfred_icon
@@ -105,6 +106,7 @@ class TrayModule(Module):
             self._bus.subscribe(
                 HotkeyRegistrationFailed, self._on_hotkey_failed, name="tray-hotkeys"
             ),
+            self._bus.subscribe(EmergencyStopped, self._on_emergency, name="tray-emergency"),
         ]
 
     async def stop(self) -> None:
@@ -131,6 +133,14 @@ class TrayModule(Module):
         if self._menu is not None and event.section == "general":
             self._menu.set_autostart_checked(event.settings.general.start_with_windows)
 
+    async def _on_emergency(self, event: EmergencyStopped) -> None:
+        if self._icon is not None:
+            self._icon.showMessage(
+                "Interrupção de emergência",
+                emergency_message(event),
+                QSystemTrayIcon.MessageIcon.Information,
+            )
+
     async def _on_hotkey_failed(self, event: HotkeyRegistrationFailed) -> None:
         if self._icon is not None:
             self._icon.showMessage(
@@ -138,6 +148,15 @@ class TrayModule(Module):
                 hotkey_failure_message(event),
                 QSystemTrayIcon.MessageIcon.Warning,
             )
+
+
+def emergency_message(event: EmergencyStopped) -> str:
+    message = f"{event.cancelled_tasks} tarefa(s) cancelada(s) em {event.elapsed_ms:.0f} ms."
+    if event.stuck_tasks:
+        message += f" {event.stuck_tasks} não respondeu(ram) ao cancelamento."
+    if event.released_inputs:
+        message += f" Liberado: {', '.join(event.released_inputs)}."
+    return message
 
 
 def hotkey_failure_message(event: HotkeyRegistrationFailed) -> str:
