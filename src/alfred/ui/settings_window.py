@@ -82,6 +82,7 @@ FIELD_LABELS = {
     "model": "Modelo",
     "timeout_seconds": "Tempo máximo de resposta (s)",
     "max_retries": "Novas tentativas",
+    "external_base_url": "URL do provedor externo",
     "input_device": "Microfone",
     "wake_word_enabled": 'Ativação pela palavra "Alfred"',
     "wake_word_confidence": "Confiança mínima da palavra",

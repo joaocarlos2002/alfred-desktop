@@ -14,6 +14,7 @@ from alfred.ai.ollama import OllamaProvider
 from alfred.app import EXIT_ALREADY_RUNNING, bootstrap, logging_options
 from alfred.automation.apps import powershell_start_apps
 from alfred.infrastructure.autostart import Autostart
+from alfred.infrastructure.credentials import CredentialStore
 from alfred.infrastructure.hotkeys import Win32HotkeyListener
 from alfred.infrastructure.input_release import Win32InputReleaser
 from alfred.infrastructure.logging_setup import configure_logging
@@ -57,6 +58,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             audio_backend=SoundDeviceBackend(),
             app_lister=powershell_start_apps,
             ai_providers=(OllamaProvider(),),
+            credentials=CredentialStore(),
             with_ui=not args.headless,
         )
         options = logging_options(
