@@ -15,6 +15,7 @@ from alfred.config.settings import LoggingSettings
 from alfred.config.store import SETTINGS_FILE, LoadResult, SettingsStore
 from alfred.core.assistant_state import AssistantStateService
 from alfred.core.autostart_service import AutostartBackend, AutostartService
+from alfred.core.confirmations import ConfirmationService
 from alfred.core.emergency import EmergencyStop
 from alfred.core.event_bus import EventBus
 from alfred.core.hotkey_service import HotkeyService
@@ -50,6 +51,7 @@ class Application:
         self.database: Database | None = None
         self.tasks: TaskRegistry | None = None
         self.emergency: EmergencyStop | None = None
+        self.confirmations: ConfirmationService | None = None
         self._shutdown = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -126,7 +128,15 @@ def bootstrap(
         input_releaser=input_releaser,
         activity=SqlActivityLogRepository(database),
     )
-    modules: list[Module] = [settings, database, emergency, AssistantStateService(bus)]
+    activity = SqlActivityLogRepository(database)
+    confirmations = ConfirmationService(bus, activity=activity)
+    modules: list[Module] = [
+        settings,
+        database,
+        emergency,
+        confirmations,
+        AssistantStateService(bus),
+    ]
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
@@ -138,11 +148,14 @@ def bootstrap(
     app.database = database
     app.tasks = tasks
     app.emergency = emergency
+    app.confirmations = confirmations
     if with_ui:
+        from alfred.ui.confirmation_panel import ConfirmationUiModule
         from alfred.ui.tray import TrayModule
         from alfred.ui.widget import WidgetModule
 
         app.manager.register(WidgetModule(bus=bus, settings=settings))
+        app.manager.register(ConfirmationUiModule(bus=bus, service=confirmations))
         app.manager.register(
             TrayModule(bus=bus, settings=settings, data_dir=data_root, on_quit=app.request_shutdown)
         )
