@@ -24,3 +24,18 @@ de núcleos.
 
 Máquina: Windows 11 Pro (build 26300), Python 3.12.16. Os consumos de modelos de IA e de
 reconhecimento de voz serão medidos separadamente quando esses módulos existirem.
+
+## Voz (medido separadamente, como pede a seção 9)
+
+Reconhecimento de fala (faster-whisper, CPU, int8), 6 s de fala pt-BR sintetizada:
+
+| Modelo | 1ª transcrição (inclui carga) | Com modelo carregado | RAM adicional |
+| ------ | ----------------------------- | -------------------- | ------------- |
+| tiny | 1,28 s | 0,36 s | +114 MB |
+| **base** (padrão) | 1,19 s | 0,56 s | +133 MB |
+| small | — (primeiro download ~460 MB) | 1,81 s | +327 MB |
+
+O modelo é descarregado após `voice.stt_idle_unload_seconds` sem uso (padrão 120 s).
+
+Palavra de ativação (Vosk small-pt, ADR-0005): ~88 MB enquanto a ativação por voz está ligada;
+CPU ≈ 0,02 × tempo real sobre trechos de fala, ~0 em silêncio.
