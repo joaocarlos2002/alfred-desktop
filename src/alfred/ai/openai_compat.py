@@ -12,9 +12,10 @@ import json
 import time
 import uuid
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-import httpx
+if TYPE_CHECKING:
+    import httpx
 
 from alfred.domain.ai import (
     ChatMessage,
@@ -85,6 +86,8 @@ class OpenAICompatibleProvider:
         if not key:
             raise ProviderAuthError(f"Sem chave para '{self.name}' no Credential Manager")
         headers = {"Authorization": f"Bearer {key}"}
+        import httpx  # sob demanda (#47)
+
         try:
             async with httpx.AsyncClient(
                 base_url=self._base_url().rstrip("/"), timeout=timeout, transport=self._transport

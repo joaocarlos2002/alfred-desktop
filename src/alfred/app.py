@@ -196,6 +196,17 @@ def bootstrap(
             )
         )
     ai = AIService(ai_registry, settings, bus)
+    from alfred.domain.assistant import ListeningStarted
+
+    warming: set[asyncio.Task[None]] = set()
+
+    async def warm_ai(_: ListeningStarted) -> None:
+        # Sem bloquear o bus: o modelo carrega em paralelo enquanto o usuário fala.
+        task = asyncio.create_task(ai.warm_up(), name="ia:pre-carga")
+        warming.add(task)
+        task.add_done_callback(warming.discard)
+
+    bus.subscribe(ListeningStarted, warm_ai, name="ai-warm-up")
 
     modules: list[Module] = [
         ai,

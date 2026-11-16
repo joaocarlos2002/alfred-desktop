@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from collections.abc import Sequence
 from dataclasses import replace
@@ -18,8 +19,8 @@ from alfred.infrastructure.credentials import CredentialStore
 from alfred.infrastructure.hotkeys import Win32HotkeyListener
 from alfred.infrastructure.input_release import Win32InputReleaser
 from alfred.infrastructure.logging_setup import configure_logging
-from alfred.infrastructure.paths import data_dir, logs_dir
-from alfred.infrastructure.single_instance import SingleInstance
+from alfred.infrastructure.paths import DATA_DIR_ENV, data_dir, logs_dir, models_dir
+from alfred.infrastructure.single_instance import SingleInstance, instance_name
 from alfred.voice.devices import SoundDeviceBackend
 
 logger = logging.getLogger("alfred")
@@ -45,7 +46,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    with SingleInstance() as instance:
+    custom = data_dir() if os.environ.get(DATA_DIR_ENV) else None
+    with SingleInstance(instance_name(custom)) as instance:
         if not instance.acquired:
             print("ALFRED já está em execução.", file=sys.stderr)
             return EXIT_ALREADY_RUNNING
@@ -61,6 +63,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             credentials=CredentialStore(),
             with_ui=not args.headless,
             system_observers=True,
+            models_root=models_dir(),
         )
         options = logging_options(
             loaded.settings.logging, logs_dir(), level_override=args.log_level
