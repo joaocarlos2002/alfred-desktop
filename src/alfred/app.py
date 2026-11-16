@@ -54,6 +54,7 @@ class Application:
         self.tasks: TaskRegistry | None = None
         self.emergency: EmergencyStop | None = None
         self.confirmations: ConfirmationService | None = None
+        self.overlay: Module | None = None
         self._shutdown = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -156,6 +157,7 @@ def bootstrap(
     if with_ui:
         from alfred.ui.activity_panel import ActivityPanelModule
         from alfred.ui.confirmation_panel import ConfirmationUiModule
+        from alfred.ui.overlay import OverlayModule
         from alfred.ui.settings_window import SettingsWindowModule
         from alfred.ui.tray import TrayModule
         from alfred.ui.widget import WidgetModule
@@ -170,6 +172,8 @@ def bootstrap(
         app.manager.register(panel)
         app.manager.register(WidgetModule(bus=bus, settings=settings, on_click=panel.toggle))
         app.manager.register(ConfirmationUiModule(bus=bus, service=confirmations))
+        app.overlay = OverlayModule()
+        app.manager.register(app.overlay)
         settings_window = SettingsWindowModule(bus=bus, settings=settings, on_open_panel=panel.show)
         app.manager.register(settings_window)
         app.manager.register(
