@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 DATA_DIR_ENV = "ALFRED_DATA_DIR"
+MODELS_DIR_ENV = "ALFRED_MODELS_DIR"
 
 
 def data_dir() -> Path:
@@ -32,6 +33,10 @@ def cache_dir() -> Path:
 
 
 def models_dir() -> Path:
+    """Modelos de voz; ``ALFRED_MODELS_DIR`` reaproveita os já baixados (ex.: benchmarks)."""
+    override = os.environ.get(MODELS_DIR_ENV)
+    if override:
+        return Path(override).expanduser().resolve()
     return data_dir() / "models"
 
 

@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import hashlib
 import sys
+from pathlib import Path
 from types import TracebackType
 
 DEFAULT_INSTANCE_NAME = "Local\\ALFRED-Desktop-SingleInstance"
+
+
+def instance_name(data_root: Path | None = None) -> str:
+    """Uma instância por diretório de dados.
+
+    O diretório padrão usa o nome histórico; um diretório alternativo (``ALFRED_DATA_DIR``,
+    ex.: benchmarks) ganha um lock próprio e pode rodar junto com o ALFRED do usuário sem
+    disputar banco nem configurações."""
+    if data_root is None:
+        return DEFAULT_INSTANCE_NAME
+    key = str(data_root.resolve()).casefold().encode("utf-8")
+    return f"{DEFAULT_INSTANCE_NAME}-{hashlib.sha1(key).hexdigest()[:12]}"
+
 
 if sys.platform == "win32":
     import ctypes

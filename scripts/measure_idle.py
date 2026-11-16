@@ -33,15 +33,30 @@ def wait_ready(log_file: Path, timeout: float) -> float:
     raise TimeoutError(f"ALFRED não ficou pronto em {timeout} s")
 
 
+def user_models_dir() -> Path:
+    base = os.environ.get("LOCALAPPDATA")
+    return (Path(base) / "ALFRED" if base else Path.home() / ".alfred") / "models"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seconds", type=float, default=30.0)
     parser.add_argument("--interval", type=float, default=1.0)
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument(
+        "--voice",
+        action="store_true",
+        help="liga microfone e palavra de ativação (usa os modelos já baixados do usuário)",
+    )
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory(prefix="alfred-bench-", ignore_cleanup_errors=True) as tmp:
         env = {**os.environ, "ALFRED_DATA_DIR": tmp}
+        if args.voice:
+            # Reaproveita os modelos já baixados (nada é baixado de novo) e liga a voz.
+            env["ALFRED_MODELS_DIR"] = str(user_models_dir())
+            settings = {"voice": {"enabled": True, "wake_word_enabled": True}}
+            (Path(tmp) / "settings.json").write_text(json.dumps(settings), "utf-8")
         command = [sys.executable, "-m", "alfred"] + (["--headless"] if args.headless else [])
         launched = time.perf_counter()
         process = subprocess.Popen(command, env=env)
@@ -51,8 +66,13 @@ def main() -> int:
             startup = time.perf_counter() - launched
             # O python.exe de um venv no Windows é um launcher que cria o interpretador real
             # como processo filho: mede-se o filho, não o launcher.
-            children = launcher.children(recursive=True)
-            proc = children[-1] if children else launcher
+            # Filhos transitórios (ex.: powershell do catálogo de apps) são ignorados.
+            pythons = [
+                c
+                for c in launcher.children(recursive=True)
+                if c.name().lower().startswith("python")
+            ]
+            proc = pythons[-1] if pythons else launcher
             proc.cpu_percent(None)
             cpu: list[float] = []
             rss: list[int] = []
@@ -68,7 +88,7 @@ def main() -> int:
             psutil.wait_procs(tree, timeout=10)
 
     result = {
-        "mode": "headless" if args.headless else "qt+tray",
+        "mode": ("headless" if args.headless else "qt+tray") + ("+voz" if args.voice else ""),
         "startup_seconds": round(startup, 2),
         "idle_seconds": args.seconds,
         "rss_mb_avg": round(sum(rss) / len(rss) / 2**20, 1),

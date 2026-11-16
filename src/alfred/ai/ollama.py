@@ -10,9 +10,10 @@ import base64
 import json
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import httpx
+if TYPE_CHECKING:
+    import httpx
 
 from alfred.domain.ai import (
     ChatMessage,
@@ -81,9 +82,13 @@ class OllamaProvider:
         self._transport = transport
 
     def _client(self, timeout: float) -> httpx.AsyncClient:
+        import httpx  # sob demanda: ~0,2 s a menos na inicialização (#47)
+
         return httpx.AsyncClient(base_url=self.base_url, timeout=timeout, transport=self._transport)
 
     async def _request(self, method: str, path: str, timeout: float, **kwargs: Any) -> Any:
+        import httpx
+
         try:
             async with self._client(timeout) as client:
                 response = await client.request(method, path, **kwargs)
@@ -104,6 +109,12 @@ class OllamaProvider:
     async def list_models(self) -> list[str]:
         data = await self._request("GET", "/api/tags", 10)
         return [model["name"] for model in data.get("models", [])]
+
+    async def warm_up(self, model: str) -> None:
+        """Carrega o modelo na memória (GPU/CPU) sem gerar texto; some após ``keep_alive``."""
+        await self._request(
+            "POST", "/api/generate", 120, json={"model": model, "keep_alive": self.keep_alive}
+        )
 
     async def vision_models(self) -> list[str]:
         """Modelos instalados que aceitam imagens (capacidade "vision" do Ollama)."""

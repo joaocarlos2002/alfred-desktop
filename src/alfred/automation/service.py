@@ -80,7 +80,22 @@ class AppsService(Module):
     async def start(self) -> None:
         if self._aliases is not None:
             self.catalog.aliases = await self._aliases.list_aliases()
-        await asyncio.to_thread(self.catalog.refresh)
+        # Listar os aplicativos (Get-StartApps) leva ~1 s: roda em segundo plano para não
+        # atrasar a inicialização (#47); o primeiro pedido que precisar espera a lista.
+        self._warmup: asyncio.Task[None] | None = asyncio.create_task(
+            asyncio.to_thread(self.catalog.refresh), name="apps:catalogo"
+        )
+
+    async def ready(self) -> None:
+        """Espera a lista inicial de aplicativos (se ainda estiver carregando)."""
+        warmup = getattr(self, "_warmup", None)
+        if warmup is None:
+            return
+        try:
+            await asyncio.shield(warmup)
+        except Exception:
+            logger.exception("Falha ao listar aplicativos; nova tentativa sob demanda")
+        self._warmup = None
 
     async def add_alias(self, app_name: str, alias: str) -> None:
         """Ex.: ``add_alias("Calculadora", "calc")`` — persistido em ``applications``."""
@@ -90,7 +105,7 @@ class AppsService(Module):
         self.catalog.aliases.setdefault(app_name, []).append(alias)
 
     async def stop(self) -> None:
-        return None
+        await self.ready()  # não deixa a listagem rodando depois do encerramento
 
     def register_commands(self, registry: CommandRegistry) -> None:
         registry.register(OPEN_PATTERN, self._open_command)
@@ -98,6 +113,7 @@ class AppsService(Module):
 
     # ------------------------------------------------------------------ abrir
     async def open_app(self, query: str) -> dict[str, Any]:
+        await self.ready()
         async with self._log.record("automation", "open_app", params={"app": query}) as rec:
             app = await asyncio.to_thread(self.catalog.resolve, query)
             before = {w.hwnd for w in await asyncio.to_thread(self._windows)}
@@ -117,6 +133,7 @@ class AppsService(Module):
 
     # ------------------------------------------------------------------ fechar
     async def close_app(self, query: str) -> dict[str, Any]:
+        await self.ready()
         async with self._log.record("automation", "close_app", params={"app": query}) as rec:
             app = await asyncio.to_thread(self.catalog.resolve, query)
             windows = [

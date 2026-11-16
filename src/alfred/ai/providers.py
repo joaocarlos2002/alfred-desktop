@@ -60,6 +60,7 @@ class AIService(Module):
         self._settings = settings
         self._bus = bus
         self._backoff = backoff
+        self._warming: asyncio.Future[None] | None = None
         self.total_input_tokens = 0
         self.total_output_tokens = 0
 
@@ -118,6 +119,26 @@ class AIService(Module):
             delay = self._backoff * 2 ** (attempt - 1)
             logger.warning("IA falhou (%s); nova tentativa %d em %.1f s", error, attempt, delay)
             await asyncio.sleep(delay)
+
+    async def warm_up(self) -> None:
+        """Pré-carrega o modelo local enquanto o usuário ainda fala (#47).
+
+        Carregar um modelo de ~5 GB leva ~20 s na primeira vez: começar ao detectar a palavra
+        de ativação esconde boa parte disso. Só para provedores locais com ``warm_up`` e
+        sem erro visível: se falhar, o pedido real reporta o problema."""
+        ai = self.config
+        try:
+            provider = self.registry.get(ai.provider)
+            warm = getattr(provider, "warm_up", None)
+            if warm is None or not getattr(provider, "local", False):
+                return
+            if self._warming is not None and not self._warming.done():
+                return
+            model = ai.model or await self._default_model(provider)
+            self._warming = asyncio.ensure_future(warm(model))
+            await self._warming
+        except ProviderError as exc:
+            logger.debug("Pré-carga da IA ignorada: %s", exc)
 
     async def _default_model(self, provider: LLMProvider) -> str:
         models = await provider.list_models()
