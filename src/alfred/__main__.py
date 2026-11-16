@@ -7,9 +7,11 @@ import asyncio
 import logging
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 
 from alfred import __version__
 from alfred.app import EXIT_ALREADY_RUNNING, bootstrap, logging_options
+from alfred.infrastructure.autostart import Autostart
 from alfred.infrastructure.logging_setup import configure_logging
 from alfred.infrastructure.paths import data_dir, logs_dir
 from alfred.infrastructure.single_instance import SingleInstance
@@ -26,6 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="sobrescreve o nível de log das configurações",
     )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="executa sem interface (sem Qt nem bandeja), útil para diagnóstico",
+    )
     return parser
 
 
@@ -37,15 +44,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("ALFRED já está em execução.", file=sys.stderr)
             return EXIT_ALREADY_RUNNING
 
-        app, loaded = bootstrap(data_dir())
-        runtime = configure_logging(
-            logging_options(loaded.settings.logging, logs_dir(), level_override=args.log_level)
+        app, loaded = bootstrap(data_dir(), autostart=Autostart(), with_tray=not args.headless)
+        options = logging_options(
+            loaded.settings.logging, logs_dir(), level_override=args.log_level
         )
+        # Sob pythonw.exe (inicialização automática) não há console: sys.stderr é None.
+        runtime = configure_logging(replace(options, console=sys.stderr is not None))
         logger.info("ALFRED %s iniciando (dados em %s)", __version__, data_dir())
         for warning in loaded.warnings:
             logger.warning(warning)
         try:
-            return asyncio.run(app.run())
+            if args.headless:
+                return asyncio.run(app.run())
+            from alfred.ui.qt_runtime import run_on_qt
+
+            return run_on_qt(app.run())
         finally:
             runtime.shutdown()
 

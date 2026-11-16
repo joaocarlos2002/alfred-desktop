@@ -17,8 +17,13 @@ Local-first, leve e modular, com suporte opcional a provedores externos de IA.
 ```powershell
 uv sync --all-extras --dev
 uv run alfred --version
+uv run alfred                 # bandeja do sistema; "Sair" no menu encerra
+uv run alfred --headless      # sem interface, para diagnóstico
 uv run alfred --log-level DEBUG
 ```
+
+A inicialização automática com o Windows é controlada pelo item "Iniciar com o Windows" do menu
+da bandeja (ou `general.start_with_windows` em `settings.json`) e fica desativada por padrão.
 
 Os dados locais (logs, banco, cache, modelos) ficam em `%LOCALAPPDATA%\ALFRED`. Em
 desenvolvimento, use `$env:ALFRED_DATA_DIR = "data"` para gravá-los em `./data`.
@@ -60,6 +65,7 @@ docs/                # documentação e ADRs
 
 - [Dependências entre módulos](docs/architecture/module-dependencies.md)
 - [Architecture Decision Records](docs/adr/README.md)
+- [Desempenho](docs/performance.md)
 
 ## Roadmap
 

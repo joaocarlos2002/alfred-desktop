@@ -13,6 +13,7 @@ from types import FrameType
 from alfred.config.events import SettingsChanged
 from alfred.config.settings import LoggingSettings
 from alfred.config.store import SETTINGS_FILE, LoadResult, SettingsStore
+from alfred.core.autostart_service import AutostartBackend, AutostartService
 from alfred.core.event_bus import EventBus
 from alfred.core.lifecycle import ModuleManager, StartupError
 from alfred.core.settings_service import SettingsService
@@ -80,11 +81,19 @@ def create_application(
     return Application(manager, bus)
 
 
-def bootstrap(data_root: Path) -> tuple[Application, LoadResult]:
+def bootstrap(
+    data_root: Path,
+    *,
+    autostart: AutostartBackend | None = None,
+    with_tray: bool = False,
+) -> tuple[Application, LoadResult]:
     """Monta a aplicação padrão a partir do diretório de dados.
 
     As configurações são carregadas de forma síncrona, antes do logging, para que o logging já
     nasça configurado; os avisos do carregamento vêm em ``LoadResult.warnings``.
+
+    ``autostart`` e ``with_tray`` só são ligados pelo executável real, para que testes nunca
+    toquem no registro do Windows nem na bandeja do sistema.
     """
     store = SettingsStore(data_root / SETTINGS_FILE)
     loaded = store.load()
@@ -98,9 +107,18 @@ def bootstrap(data_root: Path) -> tuple[Application, LoadResult]:
 
     bus.subscribe(SettingsChanged, on_settings_changed, name="logging-levels")
     database = Database(data_root / DB_FILE)
-    app = create_application([settings, database], bus=bus)
+    modules: list[Module] = [settings, database]
+    if autostart is not None:
+        modules.append(AutostartService(autostart, settings, bus))
+    app = create_application(modules, bus=bus)
     app.settings = settings
     app.database = database
+    if with_tray:
+        from alfred.ui.tray import TrayModule
+
+        app.manager.register(
+            TrayModule(bus=bus, settings=settings, data_dir=data_root, on_quit=app.request_shutdown)
+        )
     return app, loaded
 
 
