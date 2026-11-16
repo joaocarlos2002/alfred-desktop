@@ -89,6 +89,19 @@ def test_query_criteria() -> None:
     assert "num1Button" in query.describe()
 
 
+def test_name_matches_accessible_name_not_field_content() -> None:
+    """Num campo de edição o texto do controle é o conteúdo; o nome acessível é outro."""
+    from types import SimpleNamespace
+
+    criteria = ElementQuery(name="Origem").criteria()
+    assert "title" not in criteria
+    matches = criteria["predicate_func"]
+    assert matches(SimpleNamespace(name="Origem", rich_text="pedido 42"))
+    assert matches(SimpleNamespace(name="ORIGEM", rich_text=""))
+    assert not matches(SimpleNamespace(name="Entrada", rich_text="Origem"))
+    assert "nome='Origem'" in ElementQuery(name="Origem").describe()
+
+
 async def test_invoke_points_virtual_cursor_and_logs() -> None:
     svc, backend, cursor, activity = service()
 

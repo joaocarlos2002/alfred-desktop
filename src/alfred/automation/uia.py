@@ -7,6 +7,7 @@ Elementos são localizados por ``AutomationId`` (não depende do idioma), nome o
 from __future__ import annotations
 
 import contextlib
+import time
 import warnings
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -28,16 +29,30 @@ class ElementQuery:
     name: str | None = None
     control_type: str | None = None
 
-    def criteria(self) -> dict[str, str]:
-        found = {
+    def criteria(self) -> dict[str, Any]:
+        """Critérios do pywinauto.
+
+        O nome é comparado com o *Name* de UI Automation via ``predicate_func``: o critério
+        ``title`` do pywinauto compara com o texto do controle, que num campo de edição é o
+        conteúdo digitado — e não o nome acessível do campo.
+        """
+        found: dict[str, Any] = {
             "auto_id": self.automation_id,
-            "title": self.name,
             "control_type": self.control_type,
         }
-        return {k: v for k, v in found.items() if v}
+        criteria = {k: v for k, v in found.items() if v}
+        if self.name:
+            wanted = self.name.casefold()
+            criteria["predicate_func"] = lambda info: (info.name or "").casefold() == wanted
+        return criteria
 
     def describe(self) -> str:
-        return ", ".join(f"{k}={v!r}" for k, v in self.criteria().items()) or "(vazio)"
+        found = {
+            "auto_id": self.automation_id,
+            "nome": self.name,
+            "tipo": self.control_type,
+        }
+        return ", ".join(f"{k}={v!r}" for k, v in found.items() if v) or "(vazio)"
 
 
 @dataclass(frozen=True)
@@ -84,8 +99,11 @@ def _info(wrapper: Any) -> ElementInfo:
 
 
 class UiaClient:
-    def __init__(self, *, timeout: float = 5.0) -> None:
+    def __init__(self, *, timeout: float = 5.0, settle: float = 0.25) -> None:
         self.timeout = timeout
+        self.settle = settle
+        """Pausa após uma ação: Invoke e afins são assíncronos em UI Automation, e uma leitura
+        logo em seguida veria o estado antigo da interface."""
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="alfred-uia", initializer=_init_com
         )
@@ -120,21 +138,25 @@ class UiaClient:
             element.invoke()
         except Exception:
             element.click_input()  # sem padrão Invoke: clique no centro do elemento
+        time.sleep(self.settle)
         return _info(element)
 
     def _set_text(self, hwnd: int, query: ElementQuery, text: str) -> ElementInfo:
         element = self._element(hwnd, query)
         element.set_edit_text(text)
+        time.sleep(self.settle)
         return _info(element)
 
     def _select(self, hwnd: int, query: ElementQuery, item: str) -> ElementInfo:
         element = self._element(hwnd, query)
         element.select(item)
+        time.sleep(self.settle)
         return _info(element)
 
     def _expand(self, hwnd: int, query: ElementQuery) -> ElementInfo:
         element = self._element(hwnd, query)
         element.expand()
+        time.sleep(self.settle)
         return _info(element)
 
     def _read(self, hwnd: int, query: ElementQuery) -> str:
