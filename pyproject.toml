@@ -91,7 +91,7 @@ module = ["alfred.domain.*", "alfred.core.*"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["qasync", "sounddevice", "vosk", "faster_whisper", "faster_whisper.*", "piper", "piper.*", "win32com.*", "pythoncom"]
+module = ["qasync", "sounddevice", "vosk", "faster_whisper", "piper", "piper.*", "win32com.*", "pythoncom"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- import-linter
