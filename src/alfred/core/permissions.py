@@ -85,9 +85,18 @@ class PermissionService(Module):
         self._policies[(category, tool)] = policy
         logger.info("Permissão %s/%s = %s", category, tool or "*", policy.value)
 
-    async def authorize(self, tool: Tool, summary: str, target: str = "") -> bool:
-        """Decide se a ferramenta pode executar agora; pede confirmação quando exigido."""
+    async def authorize(
+        self, tool: Tool, summary: str, target: str = "", *, escalate: str | None = None
+    ) -> bool:
+        """Decide se a ferramenta pode executar agora; pede confirmação quando exigido.
+
+        ``escalate`` (um motivo) transforma "permitir" em "perguntar" para esta chamada —
+        usado contra prompt injection e para chamadas perigosas de ferramentas comuns.
+        "Negar" continua negando.
+        """
         policy = self.policy_for(tool)
+        if escalate and policy is Policy.ALLOW:
+            policy = Policy.ASK
         params = {"ferramenta": tool.name, "categoria": tool.category, "politica": policy.value}
         async with self._log.record("permission", tool.name, params=params) as rec:
             if policy is Policy.DENY:
@@ -101,7 +110,7 @@ class PermissionService(Module):
             decision = await self._confirmations.request(
                 action=summary,
                 target=target or tool.description,
-                impact=_impact(tool),
+                impact=escalate or _impact(tool),
                 category=tool.category,
             )
             rec.result = {"decisao": decision.value}

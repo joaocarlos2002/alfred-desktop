@@ -161,5 +161,6 @@ def register_vision_tool(registry: ToolRegistry, analyzer: ScreenAnalyzer) -> No
             "screen",
             Risk.READ,
             timeout=120,
+            untrusted_output=True,
         )
     )

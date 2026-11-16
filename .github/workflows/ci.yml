@@ -39,3 +39,23 @@ jobs:
 
       - name: Pytest
         run: uv run pytest --cov --cov-report=term-missing -m "not windows"
+
+  security:
+    # Cadeia de suprimentos e segredos (docs/security/threat-model.md, T8/T10).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Auditoria de dependências (pip-audit)
+        run: |
+          uv export --all-extras --no-hashes --no-emit-project --format requirements-txt -q > requirements-audit.txt
+          uvx pip-audit -r requirements-audit.txt --no-deps --disable-pip --progress-spinner off
+
+      - name: Varredura de segredos (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

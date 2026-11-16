@@ -248,3 +248,32 @@ def test_real_output_device_plays_silence() -> None:
     stream.write(np.zeros(4410, dtype=np.int16).tobytes())
     stream.stop()
     stream.close()
+
+
+def test_downloaded_file_with_wrong_hash_is_discarded(tmp_path: Path) -> None:
+    import hashlib
+
+    from alfred.voice.models import FileModelSpec, IntegrityError, ensure_files
+
+    good = b"modelo"
+    spec = FileModelSpec(
+        "voz",
+        (("https://x/a.onnx", "a.onnx", hashlib.sha256(good).hexdigest()),),
+        1,
+    )
+
+    def tampered(url: str, target: Path) -> None:
+        target.write_bytes(b"adulterado")
+
+    with pytest.raises(IntegrityError, match="hash inesperado"):
+        ensure_files(spec, tmp_path, download=tampered)
+    assert list(tmp_path.iterdir()) == []  # nada adulterado fica instalado
+    ensure_files(spec, tmp_path, download=lambda url, target: target.write_bytes(good))
+    assert (tmp_path / "a.onnx").read_bytes() == good
+
+
+def test_pinned_voice_models_have_hashes() -> None:
+    from alfred.voice.models import PIPER_PT_BR_FABER, VOSK_SMALL_PT
+
+    assert VOSK_SMALL_PT.sha256 is not None
+    assert all(len(entry) == 3 for entry in PIPER_PT_BR_FABER.files)

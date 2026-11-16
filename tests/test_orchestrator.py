@@ -46,7 +46,9 @@ class Permissions:
         self.allow = allow
         self.asked: list[str] = []
 
-    async def authorize(self, tool: Tool, summary: str, target: str = "") -> bool:
+    async def authorize(
+        self, tool: Tool, summary: str, target: str = "", *, escalate: str | None = None
+    ) -> bool:
         self.asked.append(tool.name)
         return self.allow
 

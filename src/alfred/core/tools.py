@@ -60,6 +60,11 @@ class Tool:
     idempotent: bool = False
     resource: str | None = None
     """Recurso compartilhado ("input", "browser"...): etapas do mesmo recurso são serializadas."""
+    untrusted_output: bool = False
+    """Devolve conteúdo de terceiros (página, janela, tela) que pode conter prompt injection."""
+    needs_confirmation: Callable[[Any], str | None] | None = None
+    """Recebe os parâmetros validados; devolve o motivo quando *esta* chamada exige confirmação
+    mesmo com a política "permitir" (ex.: abrir um interpretador de comandos)."""
 
     def spec(self) -> ToolSpec:
         schema = self.params.model_json_schema()
