@@ -110,9 +110,8 @@ async def test_without_confirmation_ui_sensitive_actions_are_denied() -> None:
 
 
 async def test_sqlite_repository(tmp_path: Path) -> None:
-    from alfred.infrastructure.db.permission_repository import SqlPermissionRepository
-
     from alfred.infrastructure.db.database import Database
+    from alfred.infrastructure.db.permission_repository import SqlPermissionRepository
 
     db = Database(tmp_path / "alfred.db")
     await db.start()
