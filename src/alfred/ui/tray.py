@@ -44,6 +44,7 @@ class TrayMenu:
         on_toggle_widget: Callable[[bool], None] | None = None,
         on_open_panel: Callable[[], None] | None = None,
         on_open_settings: Callable[[], None] | None = None,
+        on_toggle_wake: Callable[[bool], None] | None = None,
     ) -> None:
         self.menu = QMenu()
         header = self.menu.addAction(f"ALFRED {__version__}")
@@ -66,6 +67,13 @@ class TrayMenu:
             self.widget.toggled.connect(on_toggle_widget)
             self.menu.addAction(self.widget)
 
+        self.wake: QAction | None = None
+        if on_toggle_wake is not None:
+            self.wake = QAction('Ativação por voz ("Alfred")', self.menu)
+            self.wake.setCheckable(True)
+            self.wake.toggled.connect(on_toggle_wake)
+            self.menu.addAction(self.wake)
+
         self.autostart = QAction("Iniciar com o Windows", self.menu)
         self.autostart.setCheckable(True)
         self.autostart.toggled.connect(on_toggle_autostart)
@@ -86,6 +94,10 @@ class TrayMenu:
     def set_widget_checked(self, checked: bool) -> None:
         if self.widget is not None:
             _set_checked_silently(self.widget, checked)
+
+    def set_wake_checked(self, checked: bool) -> None:
+        if self.wake is not None:
+            _set_checked_silently(self.wake, checked)
 
 
 def _set_checked_silently(action: QAction, checked: bool) -> None:
@@ -109,7 +121,9 @@ class TrayModule(Module):
         on_quit: Callable[[], None],
         on_open_panel: Callable[[], None] | None = None,
         on_open_settings: Callable[[], None] | None = None,
+        voice_available: bool = False,
     ) -> None:
+        self._voice_available = voice_available
         self._bus = bus
         self._on_open_panel = on_open_panel
         self._on_open_settings = on_open_settings
@@ -129,10 +143,13 @@ class TrayModule(Module):
             on_toggle_widget=self._toggle_widget,
             on_open_panel=self._on_open_panel,
             on_open_settings=self._on_open_settings,
+            on_toggle_wake=self._toggle_wake if self._voice_available else None,
             data_dir=self._data_dir,
         )
         self._menu.set_autostart_checked(self._settings.current.general.start_with_windows)
         self._menu.set_widget_checked(self._settings.current.appearance.widget_visible)
+        voice = self._settings.current.voice
+        self._menu.set_wake_checked(voice.enabled and voice.wake_word_enabled)
         self._icon = QSystemTrayIcon(alfred_icon())
         self._icon.setToolTip("ALFRED — Always at your service.")
         self._icon.setContextMenu(self._menu.menu)
@@ -160,6 +177,13 @@ class TrayModule(Module):
     def _toggle_widget(self, checked: bool) -> None:
         self._update_setting("appearance", widget_visible=checked)
 
+    def _toggle_wake(self, checked: bool) -> None:
+        # Ligar a ativação por voz também liga o microfone (voice.enabled).
+        changes = {"wake_word_enabled": checked}
+        if checked:
+            changes["enabled"] = True
+        self._update_setting("voice", **changes)
+
     def _update_setting(self, section: str, **changes: Any) -> None:
         # Slot do Qt executado no loop asyncio (qasync): agenda a atualização da configuração.
         task = asyncio.ensure_future(self._settings.update(section, **changes))
@@ -178,6 +202,9 @@ class TrayModule(Module):
             self._menu.set_autostart_checked(event.settings.general.start_with_windows)
         elif event.section == "appearance":
             self._menu.set_widget_checked(event.settings.appearance.widget_visible)
+        elif event.section == "voice":
+            voice = event.settings.voice
+            self._menu.set_wake_checked(voice.enabled and voice.wake_word_enabled)
 
     async def _on_emergency(self, event: EmergencyStopped) -> None:
         if self._icon is not None:

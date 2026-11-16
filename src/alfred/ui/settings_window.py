@@ -20,6 +20,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -78,6 +79,8 @@ FIELD_LABELS = {
     "screen_capture": "Captura de tela pela IA",
     "enabled": "Ativado",
     "input_device": "Microfone",
+    "wake_word_enabled": 'Ativação pela palavra "Alfred"',
+    "wake_word_confidence": "Confiança mínima da palavra",
     "output_device": "Saída de áudio",
     "speed": "Velocidade (px/s)",
     "size": "Tamanho (px)",
@@ -103,13 +106,14 @@ def _is_section(name: str) -> bool:
     return name in Settings.section_names()
 
 
-def _bounds(info: FieldInfo) -> tuple[int, int]:
-    low, high = 0, 2_000_000_000
+def _bounds(info: FieldInfo) -> tuple[float, float]:
+    low: float = 0
+    high: float = 2_000_000_000
     for meta in info.metadata:
         if isinstance(meta, Ge):
-            low = int(meta.ge)  # type: ignore[call-overload]
+            low = float(meta.ge)  # type: ignore[arg-type]
         elif isinstance(meta, Le):
-            high = int(meta.le)  # type: ignore[call-overload]
+            high = float(meta.le)  # type: ignore[arg-type]
     return low, high
 
 
@@ -142,9 +146,18 @@ def build_editor(
             combo.addItem(CHOICE_LABELS.get(choice, str(choice)), choice)
         combo.setCurrentIndex(max(0, combo.findData(value)))
         return combo, combo.currentData
+    if annotation is float:
+        double = QDoubleSpinBox()
+        low, high = _bounds(info)
+        double.setRange(float(low), float(high) if high < 2_000_000_000 else 1e9)
+        double.setDecimals(2)
+        double.setSingleStep(0.01)
+        double.setValue(float(value))
+        return double, lambda: round(double.value(), 2)
     if annotation is int:
         spin = QSpinBox()
-        spin.setRange(*_bounds(info))
+        low, high = _bounds(info)
+        spin.setRange(int(low), int(high))
         spin.setValue(int(value))
         return spin, spin.value
     if get_origin(annotation) is dict:

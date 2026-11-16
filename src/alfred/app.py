@@ -104,6 +104,8 @@ def bootstrap(
     hotkeys: HotkeyBackend | None = None,
     input_releaser: InputReleaser | None = None,
     audio_backend: Any | None = None,
+    wake_loader: Any | None = None,
+    models_root: Path | None = None,
     with_ui: bool = False,
 ) -> tuple[Application, LoadResult]:
     """Monta a aplicação padrão a partir do diretório de dados.
@@ -115,6 +117,7 @@ def bootstrap(
     real, para que testes nunca toquem no registro do Windows, nos atalhos globais, no teclado e
     mouse nem na bandeja do sistema.
     """
+    models_root = models_root or data_root / "models"
     store = SettingsStore(data_root / SETTINGS_FILE)
     loaded = store.load()
     bus = EventBus()
@@ -148,11 +151,15 @@ def bootstrap(
     if audio_backend is not None:
         from alfred.voice.capture import AudioCapture
         from alfred.voice.module import AudioModule
+        from alfred.voice.wakeword_module import WakeWordModule, default_loader
 
         capture = AudioCapture(audio_backend)
         audio = AudioModule(capture, settings, bus)
         capture._on_device_change = audio.notify_device_change
         modules.append(audio)
+        modules.append(
+            WakeWordModule(capture, settings, bus, wake_loader or default_loader(models_root))
+        )
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
@@ -199,6 +206,7 @@ def bootstrap(
                 on_quit=app.request_shutdown,
                 on_open_panel=panel.show,
                 on_open_settings=settings_window.show,
+                voice_available=audio_backend is not None,
             )
         )
     return app, loaded

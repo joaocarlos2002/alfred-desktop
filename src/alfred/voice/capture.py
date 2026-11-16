@@ -20,7 +20,7 @@ from alfred.voice.vad import FRAME_SAMPLES, SAMPLE_RATE, Frame
 
 logger = logging.getLogger(__name__)
 
-type FrameListener = Callable[[Frame], None]
+type FrameListener = Callable[[Frame], object]
 
 RESTART_DELAYS = (0.5, 1.0, 2.0, 5.0)
 
