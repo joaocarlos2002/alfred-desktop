@@ -144,10 +144,27 @@ async def test_cancellation_releases_the_lock() -> None:
 
 async def test_lock_timeout_names_the_owner() -> None:
     lock = InputLock()
-    async with lock.hold("digitar_texto"):
-        with pytest.raises(InputLockTimeoutError, match="digitar_texto"):
-            async with lock.hold("outra", timeout=0.05):
-                pass
+    holding, release = asyncio.Event(), asyncio.Event()
+
+    async def other_task() -> None:
+        async with lock.hold("digitar_texto"):
+            holding.set()
+            await release.wait()
+
+    holder = asyncio.create_task(other_task())
+    await holding.wait()
+    with pytest.raises(InputLockTimeoutError, match="digitar_texto"):
+        async with lock.hold("outra", timeout=0.05):
+            pass
+    release.set()
+    await holder
+
+
+async def test_lock_is_reentrant_in_the_same_context_only() -> None:
+    lock = InputLock()
+    async with lock.hold("etapa"), lock.hold("servico interno"):
+        assert lock.owner == "etapa"
+    assert not lock.locked
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Win32")

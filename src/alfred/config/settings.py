@@ -107,6 +107,8 @@ class AISettings(Section):
     """Provedor para análise de tela. Vazio: o mesmo da IA (local recomendado)."""
     vision_model: str | None = None
     """Modelo multimodal. Vazio: o primeiro com visão instalado no provedor."""
+    max_parallel_steps: int = Field(default=4, ge=1, le=16)
+    """Etapas independentes executadas ao mesmo tempo (rede, arquivos, leitura)."""
 
 
 class CursorSettings(Section):

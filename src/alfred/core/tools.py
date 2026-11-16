@@ -58,6 +58,8 @@ class Tool:
     risk: Risk = Risk.ACTION
     timeout: float = 30.0
     idempotent: bool = False
+    resource: str | None = None
+    """Recurso compartilhado ("input", "browser"...): etapas do mesmo recurso são serializadas."""
 
     def spec(self) -> ToolSpec:
         schema = self.params.model_json_schema()
