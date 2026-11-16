@@ -54,18 +54,28 @@ HF_ENVIRONMENT = {
 }
 
 
+COMMAND_PROMPT = "Alfred, que horas são? Alfred, que dia é hoje? Pare. Abra o navegador."
+"""Contexto de domínio para o decodificador: melhora muito comandos curtos ditos logo após
+"Alfred" (ex.: sem ele, "Alfred, que horas são?" virava "Alfred que oração")."""
+
+
 def faster_whisper_factory(models_root: Path) -> ModelFactory:
     def create(size: str) -> WhisperLike:
         for key, value in HF_ENVIRONMENT.items():
             os.environ.setdefault(key, value)
         from faster_whisper import WhisperModel
 
-        model: WhisperLike = WhisperModel(
-            size,
-            device="cpu",
-            compute_type="int8",
-            download_root=str(models_root / "whisper"),
-        )
+        kwargs: dict[str, Any] = {
+            "device": "cpu",
+            "compute_type": "int8",
+            "download_root": str(models_root / "whisper"),
+        }
+        try:
+            # Local-first: com o modelo já baixado, nenhuma requisição de rede é feita.
+            model: WhisperLike = WhisperModel(size, local_files_only=True, **kwargs)
+        except Exception:
+            logger.info("Modelo de fala '%s' não encontrado localmente; baixando", size)
+            model = WhisperModel(size, **kwargs)
         return model
 
     return create
@@ -107,6 +117,7 @@ class SpeechToText:
                 beam_size=1,
                 vad_filter=False,
                 condition_on_previous_text=False,
+                initial_prompt=COMMAND_PROMPT,
             )
             text = " ".join(segment.text.strip() for segment in segments).strip()
             self._schedule_unload()

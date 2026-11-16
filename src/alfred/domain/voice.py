@@ -29,3 +29,23 @@ class SpeechStarted(Event):
 class SpeechFinished(Event):
     text: str
     interrupted: bool
+
+
+class UtteranceTranscribed(Event):
+    """Uma fala do usuário foi transcrita (após a palavra de ativação ou o atalho)."""
+
+    text: str
+    audio_seconds: float
+    latency_seconds: float
+    trigger: str  # wake_word | hotkey
+
+
+class SpeakRequested(Event):
+    """Pede ao módulo de voz que fale ``text``."""
+
+    text: str
+    interrupt: bool = False
+
+
+class StopSpeakingRequested(Event):
+    pass
