@@ -47,6 +47,8 @@ class GeneralSettings(Section):
 class AppearanceSettings(Section):
     theme: Literal["dark"] = "dark"
     widget_visible: bool = True
+    widget_position: tuple[int, int] | None = None
+    """Posição do widget flutuante (pixels lógicos). ``None``: canto inferior direito."""
     animations: bool = True
 
 

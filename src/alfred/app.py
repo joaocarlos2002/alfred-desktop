@@ -13,6 +13,7 @@ from types import FrameType
 from alfred.config.events import SettingsChanged
 from alfred.config.settings import LoggingSettings
 from alfred.config.store import SETTINGS_FILE, LoadResult, SettingsStore
+from alfred.core.assistant_state import AssistantStateService
 from alfred.core.autostart_service import AutostartBackend, AutostartService
 from alfred.core.emergency import EmergencyStop
 from alfred.core.event_bus import EventBus
@@ -95,14 +96,14 @@ def bootstrap(
     autostart: AutostartBackend | None = None,
     hotkeys: HotkeyBackend | None = None,
     input_releaser: InputReleaser | None = None,
-    with_tray: bool = False,
+    with_ui: bool = False,
 ) -> tuple[Application, LoadResult]:
     """Monta a aplicação padrão a partir do diretório de dados.
 
     As configurações são carregadas de forma síncrona, antes do logging, para que o logging já
     nasça configurado; os avisos do carregamento vêm em ``LoadResult.warnings``.
 
-    ``autostart``, ``hotkeys``, ``input_releaser`` e ``with_tray`` só são ligados pelo executável
+    ``autostart``, ``hotkeys``, ``input_releaser`` e ``with_ui`` só são ligados pelo executável
     real, para que testes nunca toquem no registro do Windows, nos atalhos globais, no teclado e
     mouse nem na bandeja do sistema.
     """
@@ -125,7 +126,7 @@ def bootstrap(
         input_releaser=input_releaser,
         activity=SqlActivityLogRepository(database),
     )
-    modules: list[Module] = [settings, database, emergency]
+    modules: list[Module] = [settings, database, emergency, AssistantStateService(bus)]
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
@@ -137,9 +138,11 @@ def bootstrap(
     app.database = database
     app.tasks = tasks
     app.emergency = emergency
-    if with_tray:
+    if with_ui:
         from alfred.ui.tray import TrayModule
+        from alfred.ui.widget import WidgetModule
 
+        app.manager.register(WidgetModule(bus=bus, settings=settings))
         app.manager.register(
             TrayModule(bus=bus, settings=settings, data_dir=data_root, on_quit=app.request_shutdown)
         )

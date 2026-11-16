@@ -51,7 +51,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             autostart=Autostart(),
             hotkeys=Win32HotkeyListener(),
             input_releaser=Win32InputReleaser(),
-            with_tray=not args.headless,
+            with_ui=not args.headless,
         )
         options = logging_options(
             loaded.settings.logging, logs_dir(), level_override=args.log_level

@@ -59,6 +59,8 @@ ignore = ["ASYNC109"]
 [tool.ruff.lint.per-file-ignores]
 # Em testes, operações síncronas triviais de arquivo dentro de async def são aceitáveis.
 "tests/**" = ["ASYNC240"]
+# Overrides do Qt precisam manter os nomes camelCase (paintEvent, mousePressEvent...).
+"src/alfred/ui/**" = ["N802"]
 # Migrações geradas pelo Alembic.
 "src/alfred/infrastructure/db/migrations/versions/*" = ["E501"]
 
