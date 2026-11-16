@@ -71,6 +71,10 @@ class WindowService(Module):
     async def _target(self, query: str) -> WindowInfo:
         return find_window(await asyncio.to_thread(self.ops.list), query)
 
+    async def resolve(self, query: str) -> WindowInfo:
+        """Janela que melhor corresponde a ``query`` (título ou processo)."""
+        return await self._target(query)
+
     async def focus_window(self, query: str) -> dict[str, Any]:
         async with self._log.record("automation", "focus_window", params={"janela": query}) as rec:
             window = await self._target(query)

@@ -7,6 +7,7 @@ Windows Credential Manager e nunca é registrada em logs.
 
 from __future__ import annotations
 
+import base64
 import json
 import time
 import uuid
@@ -34,6 +35,14 @@ class SecretSource(Protocol):
 
 def _message(message: ChatMessage) -> dict[str, Any]:
     payload: dict[str, Any] = {"role": message.role, "content": message.content}
+    if message.images:
+        payload["content"] = [
+            {"type": "text", "text": message.content},
+            *(
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}
+                for b64 in (base64.b64encode(png).decode("ascii") for png in message.images)
+            ),
+        ]
     if message.tool_calls:
         payload["tool_calls"] = [
             {
@@ -49,6 +58,9 @@ def _message(message: ChatMessage) -> dict[str, Any]:
 
 
 class OpenAICompatibleProvider:
+    local = False
+    """Externo: dados (inclusive imagens) saem do computador."""
+
     def __init__(
         self,
         name: str,

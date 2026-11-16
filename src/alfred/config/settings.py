@@ -103,6 +103,10 @@ class AISettings(Section):
     """Novas tentativas em falhas temporárias (rede, timeout)."""
     external_base_url: str = "https://api.openai.com/v1"
     """URL do provedor externo compatível com a API da OpenAI (provedor "externo")."""
+    vision_provider: str | None = None
+    """Provedor para análise de tela. Vazio: o mesmo da IA (local recomendado)."""
+    vision_model: str | None = None
+    """Modelo multimodal. Vazio: o primeiro com visão instalado no provedor."""
 
 
 class CursorSettings(Section):

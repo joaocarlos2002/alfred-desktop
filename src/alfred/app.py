@@ -274,7 +274,20 @@ def bootstrap(
         )
         from alfred.automation.screen import ScreenCaptureService
 
-        modules.append(ScreenCaptureService(settings, confirmations, action_log, bus))
+        screen = ScreenCaptureService(settings, confirmations, action_log, bus)
+        modules.append(screen)
+        from alfred.ai.vision import ScreenAnalyzer, register_vision_tool
+
+        async def capture_for(reason: str, window: str | None) -> bytes:
+            if window:
+                hwnd = (await windows.resolve(window)).hwnd
+                return (await screen.capture(reason, target="window", hwnd=hwnd)).png
+            return (await screen.capture(reason)).png
+
+        register_vision_tool(
+            tool_registry,
+            ScreenAnalyzer(ai_registry, settings, confirmations, capture_for, uia.describe),
+        )
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:

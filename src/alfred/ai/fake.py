@@ -14,6 +14,7 @@ class FakeProvider:
     def __init__(self, name: str = "fake", replies: list[Any] | None = None) -> None:
         """``replies``: sequência de ``ChatMessage`` (ou exceções a lançar), ou um callable."""
         self.name = name
+        self.local = True
         self._replies = list(replies or [])
         self.calls: list[dict[str, Any]] = []
 
