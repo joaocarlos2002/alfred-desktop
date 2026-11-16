@@ -147,7 +147,7 @@ filterwarnings = [
     "ignore:invalid escape sequence:SyntaxWarning",
 ]
 markers = [
-    "windows: requires a real Windows desktop session",
+    "windows: requires a real Windows desktop session (UIA, audio, SendInput, local models)",
 ]
 
 [tool.coverage.run]
@@ -157,3 +157,5 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+# Mínimo verificado na CI (testes sem desktop interativo). Ver docs/testing/acceptance.md.
+fail_under = 85
