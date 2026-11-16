@@ -93,9 +93,11 @@ class Orchestrator(Module):
     async def stop(self) -> None:
         return None
 
-    def submit(self, request: str, *, origin: str = "voice") -> asyncio.Task[str]:
+    def submit(
+        self, request: str, *, origin: str = "voice", task_id: UUID | None = None
+    ) -> asyncio.Task[str]:
         """Cria a tarefa (cancelável pelo painel e pela emergência) e devolve o handle."""
-        task_id = uuid4()
+        task_id = task_id or uuid4()
         return self._tasks.spawn(
             self.run(request, origin=origin, task_id=task_id),
             name=f"pedido:{request[:40]}",

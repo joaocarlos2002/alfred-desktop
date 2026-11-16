@@ -11,7 +11,7 @@ import json
 import logging
 import types
 from collections.abc import Callable
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Any, ClassVar, Literal, Union, get_args, get_origin
 
 from annotated_types import Ge, Le
 from pydantic import ValidationError
@@ -41,6 +41,7 @@ from alfred.config.settings import Settings
 from alfred.core.event_bus import EventBus, Subscription
 from alfred.core.settings_service import SettingsService
 from alfred.domain.module import Module
+from alfred.domain.triggers import KIND_LABELS, SYSTEM_EVENTS, TriggerCondition, TriggerSpec
 from alfred.ui.assets import avatar_pixmap
 from alfred.ui.icon import alfred_icon
 from alfred.ui.theme import THEME
@@ -56,7 +57,7 @@ SECTIONS: list[tuple[str, str, str | None]] = [
     ("ai", "Inteligência artificial", None),
     ("applications", "Aplicações", "Fase 4 — Automação"),
     ("cursor", "Cursor virtual", None),
-    ("triggers", "Gatilhos", "Fase 6 — Autonomia"),
+    ("triggers", "Gatilhos", None),
     ("memory", "Memória", None),
     ("privacy", "Privacidade", None),
     ("permissions", "Permissões", "Fase 5 — Inteligência artificial"),
@@ -331,10 +332,11 @@ class MemorySection(QWidget):
 
     def _run(self, coro: Any) -> None:
         try:
-            task = asyncio.ensure_future(coro)
+            loop = asyncio.get_running_loop()
         except RuntimeError:  # sem loop asyncio (ex.: pré-visualização)
             coro.close()
             return
+        task = loop.create_task(coro)
         self._pending.add(task)
         task.add_done_callback(self._pending.discard)
 
@@ -391,6 +393,216 @@ class MemorySection(QWidget):
             await self.reload()
 
 
+class TriggersSection(QWidget):
+    """Criar, editar, habilitar, desabilitar e excluir gatilhos (RF-011)."""
+
+    PLACEHOLDERS: ClassVar[dict[str, str]] = {
+        "voice": "Frase, ex.: modo trabalho",
+        "hotkey": "Atalho, ex.: ctrl+alt+t",
+        "schedule": "Cron, ex.: 0 8 * * 1-5 (8h, seg a sex)",
+        "startup": "(sem configuração)",
+        "app_open": "Executável, ex.: winword.exe",
+        "system": "Evento: " + ", ".join(SYSTEM_EVENTS),
+    }
+    SOURCE_KEYS: ClassVar[dict[str, str]] = {
+        "voice": "frase",
+        "hotkey": "atalho",
+        "schedule": "cron",
+        "app_open": "app",
+        "system": "evento",
+    }
+    DAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+
+    def __init__(self, triggers: Callable[[], Any] | None) -> None:
+        super().__init__()
+        self._triggers = triggers
+        self._pending: set[asyncio.Task[None]] = set()
+        self._specs: dict[int, TriggerSpec] = {}
+        self._editing: int | None = None
+        layout = QVBoxLayout(self)
+        intro = QLabel(
+            "Gatilhos entregam um pedido ao ALFRED automaticamente. A execução passa pelas mesmas "
+            "permissões e confirmações de um pedido falado. Marque/desmarque para habilitar."
+        )
+        intro.setWordWrap(True)
+        intro.setProperty("role", "muted")
+        self.list = QListWidget()
+        self.list.itemChanged.connect(self._toggled)
+        self.list.currentItemChanged.connect(lambda item, _: self._load(item))
+        form = QFormLayout()
+        self.name = QLineEdit()
+        self.kind = QComboBox()
+        for key, label in KIND_LABELS.items():
+            self.kind.addItem(label, key)
+        self.kind.currentIndexChanged.connect(self._kind_changed)
+        self.source = QLineEdit()
+        self.request = QLineEdit()
+        self.request.setPlaceholderText("Ex.: abra o Outlook e o Teams")
+        self.hours = QLineEdit()
+        self.hours.setPlaceholderText("Opcional, ex.: 08:00-18:00")
+        days = QHBoxLayout()
+        self.days: list[QCheckBox] = []
+        for label in self.DAYS:
+            box = QCheckBox(label)
+            self.days.append(box)
+            days.addWidget(box)
+        form.addRow("Nome", self.name)
+        form.addRow("Fonte", self.kind)
+        form.addRow("Configuração", self.source)
+        form.addRow("Pedido", self.request)
+        form.addRow("Horário", self.hours)
+        form.addRow("Dias (vazio = todos)", days)
+        buttons = QHBoxLayout()
+        new = QPushButton("Novo")
+        new.clicked.connect(self._new)
+        save = QPushButton("Salvar")
+        save.setProperty("role", "primary")
+        save.clicked.connect(lambda: self._run(self._save()))
+        delete = QPushButton("Excluir")
+        delete.setProperty("role", "danger")
+        delete.clicked.connect(lambda: self._run(self._delete()))
+        buttons.addWidget(new)
+        buttons.addStretch()
+        buttons.addWidget(delete)
+        buttons.addWidget(save)
+        self.feedback = QLabel()
+        self.feedback.setWordWrap(True)
+        self.feedback.setProperty("role", "muted")
+        layout.addWidget(intro)
+        layout.addWidget(self.list, 1)
+        layout.addLayout(form)
+        layout.addLayout(buttons)
+        layout.addWidget(self.feedback)
+        self._kind_changed()
+        self._run(self.reload())
+
+    def _engine(self) -> Any:
+        return self._triggers() if self._triggers is not None else None
+
+    def _run(self, coro: Any) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:  # sem loop asyncio (ex.: pré-visualização)
+            coro.close()
+            return
+        task = loop.create_task(coro)
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    def _kind_changed(self) -> None:
+        kind = self.kind.currentData()
+        self.source.setPlaceholderText(self.PLACEHOLDERS.get(kind, ""))
+        self.source.setEnabled(kind != "startup")
+
+    async def reload(self) -> None:
+        engine = self._engine()
+        if engine is None:
+            self.feedback.setText("Motor de gatilhos indisponível.")
+            return
+        specs = await engine.triggers()
+        self._specs = {spec.id: spec for spec in specs}
+        problems = getattr(engine, "problems", {})
+        self.list.blockSignals(True)
+        self.list.clear()
+        for spec in specs:
+            text = f"{spec.name} — {KIND_LABELS[spec.kind]}"
+            if spec.source_value():
+                text += f": {spec.source_value()}"
+            if spec.id in problems:
+                text += f"  (inativo: {problems[spec.id]})"
+            item = QListWidgetItem(text)
+            item.setData(Qt.ItemDataRole.UserRole, spec.id)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if spec.enabled else Qt.CheckState.Unchecked)
+            self.list.addItem(item)
+        self.list.blockSignals(False)
+        self.feedback.setText(f"{len(specs)} gatilho(s).")
+
+    def _load(self, item: QListWidgetItem | None) -> None:
+        spec = self._specs.get(item.data(Qt.ItemDataRole.UserRole)) if item else None
+        if spec is None:
+            return
+        self._editing = spec.id
+        self.name.setText(spec.name)
+        self.kind.setCurrentIndex(self.kind.findData(spec.kind))
+        self.source.setText(spec.source_value())
+        self.request.setText(spec.request)
+        self.hours.setText(spec.condition.hours or "")
+        for index, box in enumerate(self.days):
+            box.setChecked(index in spec.condition.weekdays)
+
+    def _new(self) -> None:
+        self._editing = None
+        self.list.clearSelection()
+        for field in (self.name, self.source, self.request, self.hours):
+            field.clear()
+        for box in self.days:
+            box.setChecked(False)
+
+    def _spec(self) -> TriggerSpec:
+        kind = self.kind.currentData()
+        config: dict[str, Any] = {}
+        if kind in self.SOURCE_KEYS:
+            config[self.SOURCE_KEYS[kind]] = self.source.text().strip()
+        previous = self._specs.get(self._editing) if self._editing is not None else None
+        if previous is not None and previous.kind == kind:
+            config = {**previous.config, **config}
+        return TriggerSpec(
+            id=self._editing,
+            name=self.name.text().strip(),
+            kind=kind,
+            config=config,
+            condition=TriggerCondition(
+                hours=self.hours.text().strip() or None,
+                weekdays=tuple(i for i, box in enumerate(self.days) if box.isChecked()),
+            ),
+            request=self.request.text().strip(),
+            enabled=previous.enabled if previous is not None else True,
+        )
+
+    async def _save(self) -> None:
+        engine = self._engine()
+        if engine is None:
+            return
+        try:
+            saved = await engine.save(self._spec())
+        except (ValidationError, ValueError) as exc:
+            self.feedback.setText(f"Não foi possível salvar: {_first_error(exc)}")
+            return
+        except Exception as exc:  # ex.: nome repetido
+            self.feedback.setText(f"Não foi possível salvar: {exc}")
+            return
+        self._editing = saved.id
+        await self.reload()
+        self.feedback.setText(f"Gatilho '{saved.name}' salvo.")
+
+    async def _delete(self) -> None:
+        engine = self._engine()
+        if engine is None or self._editing is None:
+            return
+        await engine.delete(self._editing)
+        self._new()
+        await self.reload()
+
+    def _toggled(self, item: QListWidgetItem) -> None:
+        engine = self._engine()
+        if engine is None:
+            return
+        enabled = item.checkState() == Qt.CheckState.Checked
+        self._run(self._set_enabled(engine, int(item.data(Qt.ItemDataRole.UserRole)), enabled))
+
+    async def _set_enabled(self, engine: Any, trigger_id: int, enabled: bool) -> None:
+        await engine.set_enabled(trigger_id, enabled)
+        await self.reload()
+
+
+def _first_error(exc: Exception) -> str:
+    if isinstance(exc, ValidationError):
+        error = exc.errors()[0]
+        return str(error.get("msg", exc))
+    return str(exc)
+
+
 class SettingsWindow(QWidget):
     def __init__(
         self,
@@ -399,6 +611,7 @@ class SettingsWindow(QWidget):
         on_open_panel: Callable[[], None] | None = None,
         choices: ChoiceProviders | None = None,
         memory: Callable[[], Any] | None = None,
+        triggers: Callable[[], Any] | None = None,
     ) -> None:
         super().__init__(None, Qt.WindowType.Window)
         self.setWindowTitle("ALFRED — Configurações")
@@ -427,6 +640,8 @@ class SettingsWindow(QWidget):
                 page = HistorySection(on_open_panel)
             elif key == "memory":
                 page = MemorySection(memory)
+            elif key == "triggers":
+                page = TriggersSection(triggers)
             else:
                 form = SectionForm(key, settings.current, choices)
                 self.forms[key] = form
@@ -472,6 +687,11 @@ class SettingsWindow(QWidget):
     def reload(self) -> None:
         for form in self.forms.values():
             form.load(self._settings.current)
+        # Dados que podem ter mudado com a janela fechada (ex.: memória por voz).
+        for memory in self.findChildren(MemorySection):
+            memory._run(memory.reload())
+        for triggers in self.findChildren(TriggersSection):
+            triggers._run(triggers.reload())
         self._set_feedback("", error=False)
 
     def _apply_clicked(self) -> None:
@@ -534,8 +754,10 @@ class SettingsWindowModule(Module):
         on_open_panel: Callable[[], None] | None = None,
         choices: ChoiceProviders | None = None,
         memory: Callable[[], Any] | None = None,
+        triggers: Callable[[], Any] | None = None,
     ) -> None:
         self._memory = memory
+        self._triggers = triggers
         self._bus = bus
         self._settings = settings
         self._on_open_panel = on_open_panel
@@ -563,6 +785,7 @@ class SettingsWindowModule(Module):
                 on_open_panel=self._on_open_panel,
                 choices=self._choices,
                 memory=self._memory,
+                triggers=self._triggers,
             )
         else:
             self.window.reload()

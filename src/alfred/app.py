@@ -70,6 +70,7 @@ class Application:
         self.permissions: PermissionService | None = None
         self.orchestrator: Orchestrator | None = None
         self.memory: Any = None
+        self.triggers: Any = None
         self.ai: AIService | None = None
         self.overlay: Module | None = None
         self.virtual_cursor: Module | None = None
@@ -129,6 +130,7 @@ def bootstrap(
     tts_output: Any | None = None,
     models_root: Path | None = None,
     with_ui: bool = False,
+    system_observers: bool = False,
 ) -> tuple[Application, LoadResult]:
     """Monta a aplicação padrão a partir do diretório de dados.
 
@@ -290,10 +292,12 @@ def bootstrap(
         )
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
+    hotkey_service: HotkeyService | None = None
     if hotkeys is not None:
-        modules.append(
-            HotkeyService(hotkeys, settings, bus, on_emergency=emergency.trigger_threadsafe)
+        hotkey_service = HotkeyService(
+            hotkeys, settings, bus, on_emergency=emergency.trigger_threadsafe
         )
+        modules.append(hotkey_service)
     from alfred.infrastructure.db.memory_repository import SqlMemoryRepository
     from alfred.memory.service import MemoryService
 
@@ -314,9 +318,26 @@ def bootstrap(
     )
     modules.append(orchestrator)
     voice_handler.fallback = lambda text: orchestrator.submit(text, origin="voice")
+    from alfred.infrastructure.db.trigger_repository import SqlTriggerRepository
+    from alfred.triggers.engine import TriggerEngine
+
+    # Observação real de processos/bateria só no executável (testes não leem o sistema).
+    trigger_observers: dict[str, Any] = (
+        {} if system_observers else {"processes": None, "power": None}
+    )
+    trigger_engine = TriggerEngine(
+        SqlTriggerRepository(database),
+        bus,
+        lambda request, task_id: orchestrator.submit(request, origin="trigger", task_id=task_id),
+        commands=command_registry,
+        hotkeys=hotkey_service,
+        **trigger_observers,
+    )
+    modules.append(trigger_engine)
     app = create_application(modules, bus=bus)
     app.orchestrator = orchestrator
     app.memory = memory
+    app.triggers = trigger_engine
     app.settings = settings
     app.database = database
     app.tasks = tasks
@@ -360,7 +381,13 @@ def bootstrap(
         bus.subscribe(ScreenCaptured, flash_capture, name="capture-flash")
         app.virtual_cursor = VirtualCursorModule(overlay=overlay, settings=settings, bus=bus)
         app.manager.register(app.virtual_cursor)
-        settings_window = SettingsWindowModule(bus=bus, settings=settings, on_open_panel=panel.show)
+        settings_window = SettingsWindowModule(
+            bus=bus,
+            settings=settings,
+            on_open_panel=panel.show,
+            memory=lambda: app.memory,
+            triggers=lambda: app.triggers,
+        )
         app.manager.register(settings_window)
         app.manager.register(
             TrayModule(
