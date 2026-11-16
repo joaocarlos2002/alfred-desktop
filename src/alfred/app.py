@@ -299,8 +299,18 @@ def bootstrap(
 
     memory = MemoryService(SqlMemoryRepository(database), bus)
     modules.append(memory)
+    from alfred.core.scheduler import StepScheduler
+
     orchestrator = Orchestrator(
-        ai, tool_registry, permissions, tasks, bus, context_provider=memory.context
+        ai,
+        tool_registry,
+        permissions,
+        tasks,
+        bus,
+        context_provider=memory.context,
+        scheduler=StepScheduler(
+            input_lock, max_parallel=lambda: settings.current.ai.max_parallel_steps
+        ),
     )
     modules.append(orchestrator)
     voice_handler.fallback = lambda text: orchestrator.submit(text, origin="voice")

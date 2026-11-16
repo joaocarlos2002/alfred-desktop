@@ -8,6 +8,7 @@ Resultados e erros voltam ao modelo até ele responder sem ferramentas (ou ating
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -16,6 +17,7 @@ from uuid import UUID, uuid4
 
 from alfred.core.event_bus import EventBus
 from alfred.core.permissions import PermissionService
+from alfred.core.scheduler import Step, StepScheduler, plan_batch
 from alfred.core.tasks import TaskRegistry
 from alfred.core.tools import ToolError, ToolRegistry
 from alfred.domain.ai import ChatMessage, ChatResponse, ProviderError, ToolCall, ToolSpec
@@ -39,6 +41,8 @@ SYSTEM_PROMPT = """Você é o ALFRED, assistente pessoal no Windows 11, e fala p
 Para agir no computador, use SEMPRE as ferramentas disponíveis; nunca diga que fez algo sem ter
 recebido o resultado da ferramenta. Se uma ferramenta falhar ou for negada, explique isso ao usuário
 com honestidade. Confirmações de ações sensíveis são pedidas pelo sistema, não por você.
+Ações independentes (ex.: ler duas páginas) podem ser pedidas juntas na mesma resposta;
+o sistema as executa em paralelo quando é seguro e em ordem quando usam teclado/mouse.
 Responda de forma breve e natural: sua resposta final será falada em voz alta."""
 
 
@@ -71,7 +75,9 @@ class Orchestrator(Module):
         max_iterations: int = MAX_ITERATIONS,
         speak: bool = True,
         context_provider: Callable[[], Awaitable[str]] | None = None,
+        scheduler: StepScheduler | None = None,
     ) -> None:
+        self._scheduler = scheduler or StepScheduler()
         self.context_provider = context_provider
         self._planner = planner
         self._tools = tools
@@ -117,13 +123,27 @@ class Orchestrator(Module):
                     reply = response.message.content.strip() or "Pronto."
                     await self._finish(task_id, TaskStatus.SUCCEEDED, reply)
                     return reply
-                for call in response.tool_calls:
-                    position += 1
-                    result = await self._run_step(task_id, position, call)
+                calls = list(response.tool_calls)
+                steps = plan_batch(
+                    [
+                        Step(key=position + i + 1, name=c.name, resource=self._resource_of(c))
+                        for i, c in enumerate(calls)
+                    ]
+                )
+                results = await self._scheduler.run(
+                    steps,
+                    functools.partial(
+                        self._run_batch_step,
+                        task_id,
+                        dict(zip((s.key for s in steps), calls, strict=True)),
+                    ),
+                )
+                position += len(calls)
+                for step, call in zip(steps, calls, strict=True):
                     history.append(
                         ChatMessage(
                             role="tool",
-                            content=json.dumps(result, ensure_ascii=False, default=str),
+                            content=json.dumps(results[step.key], ensure_ascii=False, default=str),
                             tool_call_id=call.id,
                         )
                     )
@@ -139,6 +159,17 @@ class Orchestrator(Module):
             reply = f"Não consegui falar com a inteligência artificial: {exc}"
             await self._finish(task_id, TaskStatus.FAILED, reply, error=str(exc))
             return reply
+
+    async def _run_batch_step(
+        self, task_id: UUID, batch: dict[int, ToolCall], step: Step
+    ) -> dict[str, Any]:
+        return await self._run_step(task_id, step.key, batch[step.key])
+
+    def _resource_of(self, call: ToolCall) -> str | None:
+        try:
+            return self._tools.get(call.name).resource
+        except ToolError:
+            return None  # ferramenta desconhecida: a etapa só registra a falha
 
     async def _run_step(self, task_id: UUID, position: int, call: ToolCall) -> dict[str, Any]:
         await self._bus.publish(

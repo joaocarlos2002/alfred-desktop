@@ -12,6 +12,7 @@ from alfred.automation.service import AppsService
 from alfred.automation.uia import ElementQuery
 from alfred.automation.uia_service import UiaService
 from alfred.automation.window_service import WindowService
+from alfred.core.scheduler import INPUT
 from alfred.core.tools import Risk, Tool, ToolRegistry
 
 
@@ -113,6 +114,7 @@ def register_automation_tools(
             AppParams,
             open_app,
             "applications",
+            resource=INPUT,
         ),
         Tool(
             "fechar_aplicativo",
@@ -120,14 +122,23 @@ def register_automation_tools(
             AppParams,
             close_app,
             "applications",
+            resource=INPUT,
         ),
-        Tool("focar_janela", "Traz uma janela para frente.", WindowParams, focus, "windows"),
+        Tool(
+            "focar_janela",
+            "Traz uma janela para frente.",
+            WindowParams,
+            focus,
+            "windows",
+            resource=INPUT,
+        ),
         Tool(
             "estado_janela",
             "Minimiza, maximiza ou restaura uma janela.",
             WindowStateParams,
             window_state,
             "windows",
+            resource=INPUT,
         ),
         Tool(
             "clicar_elemento",
@@ -135,6 +146,7 @@ def register_automation_tools(
             ElementParams,
             invoke,
             "ui",
+            resource=INPUT,
         ),
         Tool(
             "preencher_elemento",
@@ -142,6 +154,7 @@ def register_automation_tools(
             SetTextParams,
             set_text,
             "ui",
+            resource=INPUT,
         ),
         Tool(
             "ler_elemento",
@@ -161,13 +174,21 @@ def register_automation_tools(
             risk=Risk.READ,
             idempotent=True,
         ),
-        Tool("digitar_texto", "Digita texto na janela em foco.", TypeParams, type_text, "input"),
+        Tool(
+            "digitar_texto",
+            "Digita texto na janela em foco.",
+            TypeParams,
+            type_text,
+            "input",
+            resource=INPUT,
+        ),
         Tool(
             "pressionar_teclas",
             "Pressiona um atalho de teclado na janela em foco.",
             KeyParams,
             press,
             "input",
+            resource=INPUT,
         ),
         Tool(
             "abrir_pagina",
@@ -175,6 +196,7 @@ def register_automation_tools(
             UrlParams,
             navigate,
             "browser",
+            resource="browser",
         ),
         Tool(
             "ler_pagina",
@@ -184,6 +206,7 @@ def register_automation_tools(
             "browser",
             risk=Risk.READ,
             idempotent=True,
+            resource="browser",
         ),
     ]
     for tool in tools:
