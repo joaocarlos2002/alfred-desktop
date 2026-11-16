@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 class InputLockTimeoutError(TimeoutError):
-    pass
+    nothing_done = True
+    """A trava não foi obtida: nenhuma entrada chegou a ser enviada."""
 
 
 class InputLock:

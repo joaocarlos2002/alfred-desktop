@@ -124,7 +124,7 @@ async def test_tasks_left_running_are_marked_interrupted_on_restart(tmp_path: Pa
     await again.manager.start_all()
     try:
         (record,) = await SqlTaskRepository(again.database).list_tasks()
-        assert record.status is TaskStatus.CANCELLED
+        assert record.status is TaskStatus.INTERRUPTED
         assert record.error is not None
         assert "encerrado" in record.error
     finally:

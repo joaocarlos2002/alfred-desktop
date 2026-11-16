@@ -16,6 +16,8 @@ class TaskStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    INTERRUPTED = "interrupted"
+    """O ALFRED foi encerrado (ou caiu) com a tarefa em andamento."""
 
 
 class StepStatus(StrEnum):
@@ -24,6 +26,13 @@ class StepStatus(StrEnum):
     FAILED = "failed"
     DENIED = "denied"
     CANCELLED = "cancelled"
+
+
+class TasksInterrupted(Event):
+    """No início: tarefas que ficaram pela metade na execução anterior."""
+
+    count: int
+    titles: tuple[str, ...] = ()
 
 
 class TaskStarted(Event):

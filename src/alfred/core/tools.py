@@ -110,10 +110,16 @@ class ToolRegistry:
                 f"Argumentos inválidos para '{call.name}': {problems}"
             ) from exc
 
-    async def execute(self, call: ToolCall, params: BaseModel | None = None) -> dict[str, Any]:
-        """Executa uma chamada já validada (ou valida agora). Não repete o mesmo ``call.id``."""
+    async def execute(
+        self, call: ToolCall, params: BaseModel | None = None, *, retry: bool = False
+    ) -> dict[str, Any]:
+        """Executa uma chamada já validada (ou valida agora). Não repete o mesmo ``call.id``.
+
+        ``retry`` só é usado pela política de recuperação, quando a falha anterior foi
+        classificada como segura para repetir (nada chegou a ser feito).
+        """
         tool, validated = (self._tools[call.name], params) if params else self.validate(call)
-        if call.id in self._executed and not tool.idempotent:
+        if call.id in self._executed and not tool.idempotent and not retry:
             raise DuplicateCallError(f"A chamada '{call.id}' ({call.name}) já foi executada")
         self._executed.add(call.id)
         try:
