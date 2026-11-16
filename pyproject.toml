@@ -30,6 +30,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.7",
     "mypy>=1.13",
+    "import-linter>=2.1",
 ]
 
 [build-system]
@@ -66,6 +67,39 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = ["alfred.domain.*", "alfred.core.*"]
 strict = true
+
+# ---------------------------------------------------------------- import-linter
+# Fronteiras entre módulos: docs/architecture/module-dependencies.md
+[tool.importlinter]
+root_package = "alfred"
+
+[[tool.importlinter.contracts]]
+name = "Camadas do Modular Monolith"
+type = "layers"
+layers = [
+    "alfred.ui",
+    "alfred.ai | alfred.voice | alfred.automation | alfred.triggers | alfred.memory",
+    "alfred.core",
+    "alfred.infrastructure",
+    "alfred.config",
+    "alfred.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "domain não depende de nenhum outro módulo interno"
+type = "forbidden"
+source_modules = ["alfred.domain"]
+forbidden_modules = [
+    "alfred.core",
+    "alfred.ai",
+    "alfred.voice",
+    "alfred.automation",
+    "alfred.triggers",
+    "alfred.memory",
+    "alfred.ui",
+    "alfred.infrastructure",
+    "alfred.config",
+]
 
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
