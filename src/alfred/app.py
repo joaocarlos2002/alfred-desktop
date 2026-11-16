@@ -209,6 +209,11 @@ def bootstrap(
         )
         apps.register_commands(command_registry)
         modules.append(apps)
+        from alfred.automation.window_service import WindowService
+
+        windows = WindowService(action_log)
+        windows.register_commands(command_registry)
+        modules.append(windows)
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
