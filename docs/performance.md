@@ -39,3 +39,14 @@ O modelo é descarregado após `voice.stt_idle_unload_seconds` sem uso (padrão 
 
 Palavra de ativação (Vosk small-pt, ADR-0005): ~88 MB enquanto a ativação por voz está ligada;
 CPU ≈ 0,02 × tempo real sobre trechos de fala, ~0 em silêncio.
+
+Pilha de voz completa em execução (2026-11-16, ao fim da Fase 3), medida no processo com os
+backends reais — microfone aberto (FIFINE, 16 kHz), palavra de ativação ativa, STT e TTS sob
+demanda, 15 s em ambiente real (sem a interface Qt):
+
+| Módulos | Inicialização | CPU média | RAM do processo |
+| ------- | ------------- | --------- | --------------- |
+| 14 (núcleo + áudio, wake word, STT, TTS, barge-in, pipeline) | 0,7 s | 0,97% | 212 MB |
+
+A meta de RAM em idle (≤ 150 MB) vale para o ALFRED com a voz desligada (padrão); com a voz
+ligada, o custo adicional vem principalmente do modelo da palavra de ativação (~88 MB).
