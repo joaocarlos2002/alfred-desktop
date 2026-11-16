@@ -10,7 +10,7 @@ import asyncio
 import json
 import logging
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, ClassVar, Literal, Union, get_args, get_origin
 
 from annotated_types import Ge, Le
@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 from alfred.config.events import SettingsChanged
 from alfred.config.settings import Settings
 from alfred.core.event_bus import EventBus, Subscription
+from alfred.core.privacy import data_flows
 from alfred.core.settings_service import SettingsService
 from alfred.domain.module import Module
 from alfred.domain.triggers import KIND_LABELS, SYSTEM_EVENTS, TriggerCondition, TriggerSpec
@@ -603,6 +604,49 @@ def _first_error(exc: Exception) -> str:
     return str(exc)
 
 
+class PrivacyOverview(QWidget):
+    """Estado de cada fluxo de dados (Seção 9): o que fica no computador e o que pode sair."""
+
+    def __init__(self, providers: Callable[[], Mapping[str, bool]] | None) -> None:
+        super().__init__()
+        self._providers = providers
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        title = QLabel("Fluxos de dados")
+        title.setProperty("role", "subtitle")
+        self.list = QListWidget()
+        self.list.setMaximumHeight(230)
+        self.summary = QLabel()
+        self.summary.setWordWrap(True)
+        self.summary.setProperty("role", "muted")
+        for widget in (title, self.summary, self.list):
+            layout.addWidget(widget)
+
+    def refresh(self, settings: Settings) -> None:
+        providers = self._providers() if self._providers is not None else {}
+        flows = data_flows(settings, providers)
+        self.list.clear()
+        for flow in flows:
+            mark = "⇄ sai do computador" if flow.leaves_computer else "● local"
+            item = QListWidgetItem(f"{flow.label}: {flow.state}   ({mark})")
+            item.setToolTip(flow.detail)
+            self.list.addItem(item)
+        leaving = [f.label for f in flows if f.leaves_computer]
+        self.summary.setText(
+            "Nada sai deste computador agora."
+            if not leaving
+            else "Saindo do computador agora: " + ", ".join(leaving) + "."
+        )
+
+
+class PrivacyPage(QWidget):
+    def __init__(self, form: SectionForm, overview: PrivacyOverview) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.addWidget(overview)
+        layout.addWidget(form, 1)
+
+
 class SettingsWindow(QWidget):
     def __init__(
         self,
@@ -612,6 +656,7 @@ class SettingsWindow(QWidget):
         choices: ChoiceProviders | None = None,
         memory: Callable[[], Any] | None = None,
         triggers: Callable[[], Any] | None = None,
+        ai_providers: Callable[[], Mapping[str, bool]] | None = None,
     ) -> None:
         super().__init__(None, Qt.WindowType.Window)
         self.setWindowTitle("ALFRED — Configurações")
@@ -642,6 +687,12 @@ class SettingsWindow(QWidget):
                 page = MemorySection(memory)
             elif key == "triggers":
                 page = TriggersSection(triggers)
+            elif key == "privacy":
+                form = SectionForm(key, settings.current, choices)
+                self.forms[key] = form
+                self.privacy = PrivacyOverview(ai_providers)
+                self.privacy.refresh(settings.current)
+                page = PrivacyPage(form, self.privacy)
             else:
                 form = SectionForm(key, settings.current, choices)
                 self.forms[key] = form
@@ -687,6 +738,7 @@ class SettingsWindow(QWidget):
     def reload(self) -> None:
         for form in self.forms.values():
             form.load(self._settings.current)
+        self.privacy.refresh(self._settings.current)
         # Dados que podem ter mudado com a janela fechada (ex.: memória por voz).
         for memory in self.findChildren(MemorySection):
             memory._run(memory.reload())
@@ -719,6 +771,7 @@ class SettingsWindow(QWidget):
         self._set_feedback(
             "Configurações salvas." if saved else "Nenhuma alteração para salvar.", error=False
         )
+        self.privacy.refresh(self._settings.current)
         return True
 
     def _set_feedback(self, text: str, *, error: bool) -> None:
@@ -755,9 +808,11 @@ class SettingsWindowModule(Module):
         choices: ChoiceProviders | None = None,
         memory: Callable[[], Any] | None = None,
         triggers: Callable[[], Any] | None = None,
+        ai_providers: Callable[[], Mapping[str, bool]] | None = None,
     ) -> None:
         self._memory = memory
         self._triggers = triggers
+        self._ai_providers = ai_providers
         self._bus = bus
         self._settings = settings
         self._on_open_panel = on_open_panel
@@ -786,6 +841,7 @@ class SettingsWindowModule(Module):
                 choices=self._choices,
                 memory=self._memory,
                 triggers=self._triggers,
+                ai_providers=self._ai_providers,
             )
         else:
             self.window.reload()
@@ -795,6 +851,8 @@ class SettingsWindowModule(Module):
 
     async def _on_changed(self, event: SettingsChanged) -> None:
         # Alteração vinda de fora (bandeja, arrastar o widget): atualiza a seção exibida.
+        if self.window is not None:
+            self.window.privacy.refresh(event.settings)
         if self.window is not None and _is_section(event.section):
             form = self.window.forms.get(event.section)
             if form is not None and not form.changes(event.settings):

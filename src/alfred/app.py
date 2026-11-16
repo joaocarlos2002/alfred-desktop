@@ -388,6 +388,7 @@ def bootstrap(
             on_open_panel=panel.show,
             memory=lambda: app.memory,
             triggers=lambda: app.triggers,
+            ai_providers=lambda: provider_locality(ai_registry),
         )
         app.manager.register(settings_window)
         app.manager.register(
@@ -402,6 +403,13 @@ def bootstrap(
             )
         )
     return app, loaded
+
+
+def provider_locality(registry: ProviderRegistry) -> dict[str, bool]:
+    """Nome do provedor -> é local? (seção Privacidade)."""
+    from alfred.ai.vision import is_local
+
+    return {name: is_local(registry.get(name)) for name in registry.names}
 
 
 def _cursor_of(app: Application | None) -> Any:
