@@ -25,6 +25,7 @@ uv run alfred --version
 uv run ruff check .          # lint
 uv run ruff format .         # formatação
 uv run mypy                  # tipos (strict em domain e core)
+uv run lint-imports          # fronteiras entre módulos
 uv run pytest --cov          # testes + cobertura
 ```
 
@@ -47,6 +48,11 @@ src/alfred/
 data/                # logs, cache, modelos e exportações (não versionado)
 docs/                # documentação e ADRs
 ```
+
+## Arquitetura
+
+- [Dependências entre módulos](docs/architecture/module-dependencies.md)
+- [Architecture Decision Records](docs/adr/README.md)
 
 ## Roadmap
 
