@@ -74,6 +74,10 @@ class VoiceSettings(Section):
     """Microfone (nome). Vazio: dispositivo padrão do Windows."""
     output_device: str | None = None
     """Saída de áudio para as respostas faladas (nome). Vazio: dispositivo padrão."""
+    wake_word_enabled: bool = True
+    """Ativação pela palavra "Alfred" (requer a voz ativada; baixa um modelo de ~31 MB)."""
+    wake_word_confidence: float = Field(default=0.9, ge=0.5, le=0.99)
+    """Confiança mínima para aceitar a palavra. Maior = menos ativações acidentais."""
 
 
 class CursorSettings(Section):
