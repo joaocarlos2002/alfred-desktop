@@ -18,3 +18,12 @@ def collect_garbage_on_main_thread() -> Iterator[None]:
     """
     yield
     gc.collect()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def shutdown_qt_at_session_end() -> Iterator[None]:
+    """Encerra o Qt de forma ordenada antes da finalização do interpretador."""
+    yield
+    from alfred.ui.qt_runtime import shutdown_qt
+
+    shutdown_qt()

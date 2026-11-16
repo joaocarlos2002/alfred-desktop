@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import sys
 from collections.abc import Coroutine
 from typing import Any
 
 import qasync
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QCoreApplication, QEvent, QTimer
 from PySide6.QtWidgets import QApplication
 
 from alfred.ui.theme import apply_theme
@@ -27,6 +28,24 @@ def ensure_qt_application() -> QApplication:
     app.setQuitOnLastWindowClosed(False)
     apply_theme(app)
     return app
+
+
+def shutdown_qt() -> None:
+    """Destrói widgets e o QApplication de forma ordenada, antes da finalização do Python.
+
+    Sem isso, o coletor do interpretador destrói objetos Qt em ordem arbitrária na saída do
+    processo, o que causa falhas de segmentação intermitentes.
+    """
+    app = QApplication.instance()
+    if not isinstance(app, QApplication):
+        return
+    for widget in QApplication.topLevelWidgets():
+        widget.close()
+        widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    app.processEvents()
+    gc.collect()
+    app.shutdown()
 
 
 def run_on_qt[T](main: Coroutine[Any, Any, T]) -> T:
