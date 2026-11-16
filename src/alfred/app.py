@@ -69,6 +69,7 @@ class Application:
         self.tools: ToolRegistry | None = None
         self.permissions: PermissionService | None = None
         self.orchestrator: Orchestrator | None = None
+        self.memory: Any = None
         self.ai: AIService | None = None
         self.overlay: Module | None = None
         self.virtual_cursor: Module | None = None
@@ -280,11 +281,19 @@ def bootstrap(
         modules.append(
             HotkeyService(hotkeys, settings, bus, on_emergency=emergency.trigger_threadsafe)
         )
-    orchestrator = Orchestrator(ai, tool_registry, permissions, tasks, bus)
+    from alfred.infrastructure.db.memory_repository import SqlMemoryRepository
+    from alfred.memory.service import MemoryService
+
+    memory = MemoryService(SqlMemoryRepository(database), bus)
+    modules.append(memory)
+    orchestrator = Orchestrator(
+        ai, tool_registry, permissions, tasks, bus, context_provider=memory.context
+    )
     modules.append(orchestrator)
     voice_handler.fallback = lambda text: orchestrator.submit(text, origin="voice")
     app = create_application(modules, bus=bus)
     app.orchestrator = orchestrator
+    app.memory = memory
     app.settings = settings
     app.database = database
     app.tasks = tasks
