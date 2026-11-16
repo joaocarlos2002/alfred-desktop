@@ -63,7 +63,9 @@ class ActionLog:
             record.status, record.error = ActivityStatus.CANCELLED, "cancelada"
             raise
         except Exception as exc:
-            record.status, record.error = ActivityStatus.FAILED, f"{type(exc).__name__}: {exc}"
+            if record.status is not ActivityStatus.DENIED:  # uma recusa explícita prevalece
+                record.status = ActivityStatus.FAILED
+                record.error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
             await self._write(record, (time.perf_counter() - started) * 1000)

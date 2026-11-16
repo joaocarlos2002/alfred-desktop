@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from alfred.domain.events import Event
+
 
 class ScreenRect(BaseModel):
     """Retângulo em **pixels físicos** do desktop virtual (como reportado pelo Win32/UIA)."""
@@ -52,3 +54,10 @@ class VirtualCursor(Protocol):
         ...
 
     def hide(self) -> None: ...
+
+
+class ScreenCaptured(Event):
+    """Uma captura de tela foi feita (para indicação visual e auditoria)."""
+
+    area: ScreenRect
+    reason: str
