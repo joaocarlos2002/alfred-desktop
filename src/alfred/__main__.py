@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 
 from alfred import __version__
+from alfred.ai.ollama import OllamaProvider
 from alfred.app import EXIT_ALREADY_RUNNING, bootstrap, logging_options
 from alfred.automation.apps import powershell_start_apps
 from alfred.infrastructure.autostart import Autostart
@@ -55,6 +56,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             input_releaser=Win32InputReleaser(),
             audio_backend=SoundDeviceBackend(),
             app_lister=powershell_start_apps,
+            ai_providers=(OllamaProvider(),),
             with_ui=not args.headless,
         )
         options = logging_options(
