@@ -28,6 +28,7 @@ from alfred.core.lifecycle import ModuleManager, StartupError
 from alfred.core.settings_service import SettingsService
 from alfred.core.task_tracker import TaskTracker
 from alfred.core.tasks import TaskRegistry
+from alfred.core.tools import ToolRegistry
 from alfred.core.voice_commands import VoiceCommandHandler
 from alfred.domain.emergency import InputReleaser
 from alfred.domain.events import Event
@@ -62,6 +63,7 @@ class Application:
         self.confirmations: ConfirmationService | None = None
         self.action_log: ActionLog | None = None
         self.input_lock: InputLock | None = None
+        self.tools: ToolRegistry | None = None
         self.ai: AIService | None = None
         self.overlay: Module | None = None
         self.virtual_cursor: Module | None = None
@@ -154,6 +156,7 @@ def bootstrap(
     activity = SqlActivityLogRepository(database)
     action_log = ActionLog(activity)
     input_lock = InputLock()
+    tool_registry = ToolRegistry()
     task_history = SqlTaskRepository(database)
     confirmations = ConfirmationService(bus, activity=activity)
 
@@ -244,10 +247,17 @@ def bootstrap(
         modules.append(uia)
         from alfred.automation.input_service import InputService
 
-        modules.append(InputService(input_lock, action_log))
+        keyboard = InputService(input_lock, action_log)
+        modules.append(keyboard)
         from alfred.automation.browser import BrowserService
 
-        modules.append(BrowserService(action_log, confirmations, data_root / "browser-profile"))
+        browser = BrowserService(action_log, confirmations, data_root / "browser-profile")
+        modules.append(browser)
+        from alfred.automation.tools import register_automation_tools
+
+        register_automation_tools(
+            tool_registry, apps=apps, windows=windows, uia=uia, keyboard=keyboard, browser=browser
+        )
         from alfred.automation.screen import ScreenCaptureService
 
         modules.append(ScreenCaptureService(settings, confirmations, action_log, bus))
@@ -265,6 +275,7 @@ def bootstrap(
     app.confirmations = confirmations
     app.action_log = action_log
     app.input_lock = input_lock
+    app.tools = tool_registry
     app.ai = ai
     if with_ui:
         from alfred.ui.activity_panel import ActivityPanelModule
