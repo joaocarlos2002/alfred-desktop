@@ -53,6 +53,10 @@ MONTHS = [
     "novembro",
     "dezembro",
 ]
+EMERGENCY_RE = re.compile(r"\b(pare tudo|cancel\w* tudo|emergencia)\b")
+STOP_RE = re.compile(r"(pare|para|silencio|chega|cancela|cancelar)")
+TIME_RE = re.compile(r"\b(que horas|horas sao|hora e agora)\b")
+DATE_RE = re.compile(r"\b(que dia|data de hoje|dia e hoje)\b")
 UNKNOWN_REPLY = (
     "Entendi: {text} Ainda não sei executar esse pedido. "
     "A inteligência artificial chega em uma próxima versão."
@@ -105,7 +109,9 @@ class VoiceCommandHandler(Module):
         emergency: Action,
         clock: Callable[[], datetime] = datetime.now,
         registry: CommandRegistry | None = None,
+        fallback: Callable[[str], object] | None = None,
     ) -> None:
+        self.fallback = fallback
         self.registry = registry or CommandRegistry()
         self._bus = bus
         self._emergency = emergency
@@ -121,19 +127,31 @@ class VoiceCommandHandler(Module):
         if self._subscription is not None:
             self._subscription.unsubscribe()
 
+    async def _is_builtin(self, text: str) -> bool:
+        """Comandos atendidos sem IA (os mesmos padrões de ``interpret``)."""
+        command = normalize(strip_wake_word(text))
+        return bool(
+            not command
+            or EMERGENCY_RE.search(command)
+            or STOP_RE.fullmatch(command)
+            or TIME_RE.search(command)
+            or DATE_RE.search(command)
+            or self.registry.match(command)
+        )
+
     async def interpret(self, text: str) -> Outcome:
         command = normalize(strip_wake_word(text))
         if not command:
             return Outcome("vazio", "Sim? Estou ouvindo.")
-        if re.search(r"\b(pare tudo|cancel\w* tudo|emergencia)\b", command):
+        if EMERGENCY_RE.search(command):
             await self._emergency()
             return Outcome("emergencia", "Tudo interrompido.")
-        if re.fullmatch(r"(pare|para|silencio|chega|cancela|cancelar)", command):
+        if STOP_RE.fullmatch(command):
             await self._bus.publish(StopSpeakingRequested())
             return Outcome("parar_fala", None)
-        if re.search(r"\b(que horas|horas sao|hora e agora)\b", command):
+        if TIME_RE.search(command):
             return Outcome("hora", spoken_time(self._clock()))
-        if re.search(r"\b(que dia|data de hoje|dia e hoje)\b", command):
+        if DATE_RE.search(command):
             return Outcome("data", spoken_date(self._clock()))
         registered = self.registry.match(command)
         if registered is not None:
@@ -143,6 +161,10 @@ class VoiceCommandHandler(Module):
         return Outcome("desconhecido", UNKNOWN_REPLY.format(text=text.strip()), understood=False)
 
     async def handle(self, event: UtteranceTranscribed) -> None:
+        if self.fallback is not None and not await self._is_builtin(event.text):
+            # Pedido livre: o orquestrador cria a tarefa e responde (IA, Fase 5).
+            self.fallback(event.text)
+            return
         task_id = uuid4()
         await self._bus.publish(TaskStarted(task_id=task_id, title=event.text, origin="voice"))
         await self._bus.publish(
