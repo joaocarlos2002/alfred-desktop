@@ -31,6 +31,7 @@ voice = [
 ai = []
 automation = [
     "psutil>=6.0",
+    "pywinauto>=0.6.9; sys_platform == 'win32'",
     "pywin32>=306; sys_platform == 'win32'",
 ]
 
@@ -94,7 +95,7 @@ module = ["alfred.domain.*", "alfred.core.*"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["qasync", "sounddevice", "vosk", "faster_whisper", "piper", "piper.*", "win32com.*", "pythoncom", "win32gui", "win32process", "win32con", "win32api", "psutil"]
+module = ["qasync", "sounddevice", "vosk", "faster_whisper", "piper", "piper.*", "win32com.*", "pythoncom", "win32gui", "win32process", "win32con", "win32api", "psutil", "pywinauto"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- import-linter
@@ -136,6 +137,10 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-ra --strict-markers"
+filterwarnings = [
+    # pywinauto 0.6.9: escapes inválidos em docstrings (problema da biblioteca, não nosso).
+    "ignore:invalid escape sequence:SyntaxWarning",
+]
 markers = [
     "windows: requires a real Windows desktop session",
 ]

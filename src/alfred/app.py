@@ -214,6 +214,10 @@ def bootstrap(
         windows = WindowService(action_log)
         windows.register_commands(command_registry)
         modules.append(windows)
+        from alfred.automation.uia_service import UiaService
+
+        uia = UiaService(action_log, cursor=lambda: _cursor_of(app))
+        modules.append(uia)
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     if hotkeys is not None:
@@ -266,6 +270,12 @@ def bootstrap(
             )
         )
     return app, loaded
+
+
+def _cursor_of(app: Application | None) -> Any:
+    """Cursor virtual da interface, quando existir (resolvido na hora do uso)."""
+    module = getattr(app, "virtual_cursor", None) if app is not None else None
+    return getattr(module, "cursor", None)
 
 
 def logging_options(
