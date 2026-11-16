@@ -14,7 +14,7 @@ import queue
 import re
 import sys
 import threading
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
@@ -185,13 +185,21 @@ def configure_logging(
     for existing in list(root.handlers):
         root.removeHandler(existing)
     root.addHandler(queue_handler)
-    root.setLevel(options.level.upper())
-    _apply_module_levels(options.module_levels.items())
+    apply_levels(options.level, options.module_levels)
 
     listener.start()
     return LoggingRuntime(listener, queue_handler, log_file)
 
 
-def _apply_module_levels(levels: Iterable[tuple[str, str]]) -> None:
-    for name, level in levels:
-        logging.getLogger(name).setLevel(level.upper())
+_configured_loggers: set[str] = set()
+
+
+def apply_levels(level: str, module_levels: Mapping[str, str]) -> None:
+    """Aplica o nível global e por módulo; loggers removidos da lista voltam a herdar."""
+    logging.getLogger().setLevel(level.upper())
+    for name in _configured_loggers - set(module_levels):
+        logging.getLogger(name).setLevel(logging.NOTSET)
+    for name, module_level in module_levels.items():
+        logging.getLogger(name).setLevel(module_level.upper())
+    _configured_loggers.clear()
+    _configured_loggers.update(module_levels)

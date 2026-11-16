@@ -7,12 +7,18 @@ import logging
 import signal
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from types import FrameType
 
+from alfred.config.events import SettingsChanged
+from alfred.config.settings import LoggingSettings
+from alfred.config.store import SETTINGS_FILE, LoadResult, SettingsStore
 from alfred.core.event_bus import EventBus
 from alfred.core.lifecycle import ModuleManager, StartupError
+from alfred.core.settings_service import SettingsService
 from alfred.domain.events import Event
 from alfred.domain.module import Module
+from alfred.infrastructure.logging_setup import LoggingOptions, apply_levels
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +37,7 @@ class Application:
     def __init__(self, manager: ModuleManager, bus: EventBus) -> None:
         self.manager = manager
         self.bus = bus
+        self.settings: SettingsService | None = None
         self._shutdown = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -69,6 +76,40 @@ def create_application(
     for module in modules:
         manager.register(module)
     return Application(manager, bus)
+
+
+def bootstrap(data_root: Path) -> tuple[Application, LoadResult]:
+    """Monta a aplicação padrão a partir do diretório de dados.
+
+    As configurações são carregadas de forma síncrona, antes do logging, para que o logging já
+    nasça configurado; os avisos do carregamento vêm em ``LoadResult.warnings``.
+    """
+    store = SettingsStore(data_root / SETTINGS_FILE)
+    loaded = store.load()
+    bus = EventBus()
+    settings = SettingsService(store, bus, initial=loaded.settings)
+
+    async def on_settings_changed(event: SettingsChanged) -> None:
+        if event.section == "logging":
+            current = event.settings.logging
+            apply_levels(current.level, current.module_levels)
+
+    bus.subscribe(SettingsChanged, on_settings_changed, name="logging-levels")
+    app = create_application([settings], bus=bus)
+    app.settings = settings
+    return app, loaded
+
+
+def logging_options(
+    settings: LoggingSettings, log_dir: Path | None, *, level_override: str | None = None
+) -> LoggingOptions:
+    return LoggingOptions(
+        level=level_override or settings.level,
+        module_levels=dict(settings.module_levels),
+        log_dir=log_dir,
+        max_bytes=settings.max_bytes,
+        backup_count=settings.backup_count,
+    )
 
 
 _event_logger = logging.getLogger("alfred.events")
