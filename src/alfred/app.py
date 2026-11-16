@@ -14,6 +14,7 @@ from typing import Any
 from alfred.config.events import SettingsChanged
 from alfred.config.settings import LoggingSettings
 from alfred.config.store import SETTINGS_FILE, LoadResult, SettingsStore
+from alfred.core.action_log import ActionLog
 from alfred.core.assistant_state import AssistantStateService
 from alfred.core.autostart_service import AutostartBackend, AutostartService
 from alfred.core.confirmations import ConfirmationService
@@ -56,6 +57,7 @@ class Application:
         self.tasks: TaskRegistry | None = None
         self.emergency: EmergencyStop | None = None
         self.confirmations: ConfirmationService | None = None
+        self.action_log: ActionLog | None = None
         self.overlay: Module | None = None
         self.virtual_cursor: Module | None = None
         self._shutdown = asyncio.Event()
@@ -142,6 +144,7 @@ def bootstrap(
         activity=SqlActivityLogRepository(database),
     )
     activity = SqlActivityLogRepository(database)
+    action_log = ActionLog(activity)
     task_history = SqlTaskRepository(database)
     confirmations = ConfirmationService(bus, activity=activity)
 
@@ -201,6 +204,7 @@ def bootstrap(
     app.tasks = tasks
     app.emergency = emergency
     app.confirmations = confirmations
+    app.action_log = action_log
     if with_ui:
         from alfred.ui.activity_panel import ActivityPanelModule
         from alfred.ui.confirmation_panel import ConfirmationUiModule
@@ -216,6 +220,7 @@ def bootstrap(
             activity=activity,
             is_running=tasks.is_running,
             cancel=tasks.cancel,
+            export=lambda: action_log.export(data_root / "exports"),
         )
         app.manager.register(panel)
         app.manager.register(WidgetModule(bus=bus, settings=settings, on_click=panel.toggle))

@@ -9,8 +9,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -162,7 +163,12 @@ class EmptyState(QWidget):
 
 
 class ActivityPanel(QWidget):
-    def __init__(self, *, on_cancel: Callable[[UUID], bool]) -> None:
+    def __init__(
+        self,
+        *,
+        on_cancel: Callable[[UUID], bool],
+        on_export: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__(None, Qt.WindowType.Window)
         self.setWindowTitle("ALFRED — Atividades")
         self.setWindowIcon(alfred_icon())
@@ -247,6 +253,17 @@ class ActivityPanel(QWidget):
         self.history_stack.addWidget(self.history_tree)
         self.history_stack.addWidget(self.history_empty)
         history_layout.addWidget(self.history_stack)
+        export_row = QHBoxLayout()
+        self.export_feedback = QLabel()
+        self.export_feedback.setProperty("role", "muted")
+        self.export_feedback.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.export_button = QPushButton("Exportar histórico")
+        self.export_button.setEnabled(on_export is not None)
+        if on_export is not None:
+            self.export_button.clicked.connect(on_export)
+        export_row.addWidget(self.export_feedback, 1)
+        export_row.addWidget(self.export_button)
+        history_layout.addLayout(export_row)
         self.tabs.addTab(history_tab, "Histórico")
 
     # ------------------------------------------------------------------ filtros
@@ -347,7 +364,9 @@ class ActivityPanelModule(Module):
         activity: ActivityLogRepository,
         is_running: Callable[[UUID], bool],
         cancel: Callable[[UUID], bool],
+        export: Callable[[], Awaitable[Path]] | None = None,
     ) -> None:
+        self._export = export
         self._bus = bus
         self._tasks = tasks
         self._activity = activity
@@ -358,7 +377,10 @@ class ActivityPanelModule(Module):
         self._refresh_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
-        panel = ActivityPanel(on_cancel=self._cancel)
+        panel = ActivityPanel(
+            on_cancel=self._cancel,
+            on_export=self._start_export if self._export is not None else None,
+        )
         panel.status_filter.currentIndexChanged.connect(lambda _: self.schedule_refresh())
         panel.period_filter.currentIndexChanged.connect(lambda _: self.schedule_refresh())
         self.panel = panel
@@ -373,6 +395,23 @@ class ActivityPanelModule(Module):
             self.panel.close()
             self.panel.deleteLater()
             self.panel = None
+
+    def _start_export(self) -> None:
+        self._export_task = asyncio.ensure_future(self.export())
+
+    async def export(self) -> Path | None:
+        if self._export is None or self.panel is None:
+            return None
+        try:
+            path = await self._export()
+        except Exception as exc:
+            logger.exception("Falha ao exportar o histórico")
+            if self.panel is not None:
+                self.panel.export_feedback.setText(f"Falha ao exportar: {exc}")
+            return None
+        if self.panel is not None:
+            self.panel.export_feedback.setText(f"Exportado para {path}")
+        return path
 
     def toggle(self) -> None:
         if self.panel is None:
