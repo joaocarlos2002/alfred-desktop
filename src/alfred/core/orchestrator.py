@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
@@ -69,7 +70,9 @@ class Orchestrator(Module):
         *,
         max_iterations: int = MAX_ITERATIONS,
         speak: bool = True,
+        context_provider: Callable[[], Awaitable[str]] | None = None,
     ) -> None:
+        self.context_provider = context_provider
         self._planner = planner
         self._tools = tools
         self._permissions = permissions
@@ -96,8 +99,13 @@ class Orchestrator(Module):
     async def run(self, request: str, *, origin: str = "voice", task_id: UUID | None = None) -> str:
         task_id = task_id or uuid4()
         await self._bus.publish(TaskStarted(task_id=task_id, title=request, origin=origin))
+        system = SYSTEM_PROMPT
+        if self.context_provider is not None:
+            extra = await self.context_provider()
+            if extra:
+                system = f"{SYSTEM_PROMPT}\n\n{extra}"
         history = [
-            ChatMessage(role="system", content=SYSTEM_PROMPT),
+            ChatMessage(role="system", content=system),
             ChatMessage(role="user", content=request),
         ]
         position = 0

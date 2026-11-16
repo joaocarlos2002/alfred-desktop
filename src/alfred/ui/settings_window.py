@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSpinBox,
@@ -56,7 +57,7 @@ SECTIONS: list[tuple[str, str, str | None]] = [
     ("applications", "Aplicações", "Fase 4 — Automação"),
     ("cursor", "Cursor virtual", None),
     ("triggers", "Gatilhos", "Fase 6 — Autonomia"),
-    ("memory", "Memória", "Fase 5 — Inteligência artificial"),
+    ("memory", "Memória", None),
     ("privacy", "Privacidade", None),
     ("permissions", "Permissões", "Fase 5 — Inteligência artificial"),
     ("history", "Histórico", None),
@@ -284,6 +285,112 @@ class HistorySection(QWidget):
         layout.addStretch()
 
 
+class MemorySection(QWidget):
+    """Consultar, adicionar, editar, excluir e apagar tudo o que o ALFRED lembra (RF-012)."""
+
+    def __init__(self, memory: Callable[[], Any] | None) -> None:
+        super().__init__()
+        self._memory = memory
+        self._pending: set[asyncio.Task[None]] = set()
+        layout = QVBoxLayout(self)
+        intro = QLabel(
+            "O que o ALFRED lembra sobre você. Fica só neste computador e é usado como contexto "
+            "da inteligência artificial. Dê dois cliques para editar."
+        )
+        intro.setWordWrap(True)
+        intro.setProperty("role", "muted")
+        self.list = QListWidget()
+        self.list.itemChanged.connect(self._edited)
+        self.new_item = QLineEdit()
+        self.new_item.setPlaceholderText("Ex.: Prefiro respostas curtas.")
+        add = QPushButton("Lembrar")
+        add.clicked.connect(lambda: self._run(self._add()))
+        delete = QPushButton("Excluir selecionada")
+        delete.clicked.connect(lambda: self._run(self._delete()))
+        forget = QPushButton("Esquecer tudo")
+        forget.setProperty("role", "danger")
+        forget.clicked.connect(self._confirm_forget)
+        self.feedback = QLabel()
+        self.feedback.setProperty("role", "muted")
+        row = QHBoxLayout()
+        row.addWidget(self.new_item, 1)
+        row.addWidget(add)
+        actions = QHBoxLayout()
+        actions.addWidget(delete)
+        actions.addStretch()
+        actions.addWidget(forget)
+        for widget in (intro, self.list):
+            layout.addWidget(widget)
+        layout.addLayout(row)
+        layout.addLayout(actions)
+        layout.addWidget(self.feedback)
+        self._run(self.reload())
+
+    def _service(self) -> Any:
+        return self._memory() if self._memory is not None else None
+
+    def _run(self, coro: Any) -> None:
+        try:
+            task = asyncio.ensure_future(coro)
+        except RuntimeError:  # sem loop asyncio (ex.: pré-visualização)
+            coro.close()
+            return
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def reload(self) -> None:
+        service = self._service()
+        if service is None:
+            self.feedback.setText("Memória indisponível.")
+            return
+        self.list.blockSignals(True)
+        self.list.clear()
+        for item in await service.memories():
+            entry = QListWidgetItem(item.content)
+            entry.setData(Qt.ItemDataRole.UserRole, item.id)
+            entry.setFlags(entry.flags() | Qt.ItemFlag.ItemIsEditable)
+            self.list.addItem(entry)
+        self.list.blockSignals(False)
+        self.feedback.setText(f"{self.list.count()} memória(s).")
+
+    async def _add(self) -> None:
+        text = self.new_item.text().strip()
+        service = self._service()
+        if text and service is not None:
+            await service.remember(text)
+            self.new_item.clear()
+            await self.reload()
+
+    async def _delete(self) -> None:
+        item = self.list.currentItem()
+        service = self._service()
+        if item is not None and service is not None:
+            await service.forget(int(item.data(Qt.ItemDataRole.UserRole)))
+            await self.reload()
+
+    def _edited(self, item: QListWidgetItem) -> None:
+        service = self._service()
+        if service is not None:
+            self._run(service.edit(int(item.data(Qt.ItemDataRole.UserRole)), item.text()))
+
+    def _confirm_forget(self) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Esquecer tudo",
+            "Apagar todas as memórias e conversas do ALFRED? Isso não pode ser desfeito.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._run(self._forget_all())
+
+    async def _forget_all(self) -> None:
+        service = self._service()
+        if service is not None:
+            await service.forget_everything()
+            await self.reload()
+
+
 class SettingsWindow(QWidget):
     def __init__(
         self,
@@ -291,6 +398,7 @@ class SettingsWindow(QWidget):
         *,
         on_open_panel: Callable[[], None] | None = None,
         choices: ChoiceProviders | None = None,
+        memory: Callable[[], Any] | None = None,
     ) -> None:
         super().__init__(None, Qt.WindowType.Window)
         self.setWindowTitle("ALFRED — Configurações")
@@ -317,6 +425,8 @@ class SettingsWindow(QWidget):
                 page: QWidget = UnavailableSection(title, phase)
             elif key == "history":
                 page = HistorySection(on_open_panel)
+            elif key == "memory":
+                page = MemorySection(memory)
             else:
                 form = SectionForm(key, settings.current, choices)
                 self.forms[key] = form
@@ -423,7 +533,9 @@ class SettingsWindowModule(Module):
         settings: SettingsService,
         on_open_panel: Callable[[], None] | None = None,
         choices: ChoiceProviders | None = None,
+        memory: Callable[[], Any] | None = None,
     ) -> None:
+        self._memory = memory
         self._bus = bus
         self._settings = settings
         self._on_open_panel = on_open_panel
@@ -447,7 +559,10 @@ class SettingsWindowModule(Module):
     def show(self) -> None:
         if self.window is None:
             self.window = SettingsWindow(
-                self._settings, on_open_panel=self._on_open_panel, choices=self._choices
+                self._settings,
+                on_open_panel=self._on_open_panel,
+                choices=self._choices,
+                memory=self._memory,
             )
         else:
             self.window.reload()
