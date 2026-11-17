@@ -161,6 +161,8 @@ class VoiceCommandHandler(Module):
         return Outcome("desconhecido", UNKNOWN_REPLY.format(text=text.strip()), understood=False)
 
     async def handle(self, event: UtteranceTranscribed) -> None:
+        if event.trigger == "dictation":
+            return  # fala ditada vai para o texto, não para comandos nem para a IA
         if self.fallback is not None and not await self._is_builtin(event.text):
             # Pedido livre: o orquestrador cria a tarefa e responde (IA, Fase 5).
             self.fallback(event.text)

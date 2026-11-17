@@ -49,3 +49,11 @@ class SpeakRequested(Event):
 
 class StopSpeakingRequested(Event):
     pass
+
+
+class DictationStarted(Event):
+    """Modo ditado ativo: o que o usuário falar será digitado no aplicativo em foco."""
+
+
+class DictationStopped(Event):
+    characters: int = 0

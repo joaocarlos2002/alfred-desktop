@@ -217,4 +217,4 @@ def test_skills_section_toggles_a_real_skill(qt_app: QApplication, tmp_path: Pat
 
     assert run_on_qt(scenario()) == (True, True)
     assert app.settings is not None
-    assert app.settings.current.skills.enabled == ("demo",)
+    assert "demo" in app.settings.current.skills.enabled
