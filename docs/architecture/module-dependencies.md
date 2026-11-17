@@ -11,6 +11,7 @@ Um módulo só pode importar módulos de camadas **abaixo** dele. Módulos na me
 
 ```text
 ui
+skills
 ai | voice | automation | triggers | memory
 core
 infrastructure
@@ -25,6 +26,7 @@ domain
 | `infrastructure` | `config`, `domain` |
 | `core` | `infrastructure`, `config`, `domain` |
 | `ai`, `voice`, `automation`, `triggers`, `memory` | `core` e abaixo — nunca um ao outro |
+| `skills` | `ai`, `voice`, `automation`, `triggers`, `memory` e abaixo (ADR-0006) |
 | `ui` | todos os anteriores |
 
 ## Raiz de composição

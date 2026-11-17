@@ -11,3 +11,4 @@ um novo ADR que substitui o anterior.
 | [0003](0003-sqlite-sqlalchemy-alembic.md) | Persistência local com SQLite, SQLAlchemy e Alembic | Aceito |
 | [0004](0004-settings-in-json.md) | Configurações em JSON, fora do SQLite | Aceito |
 | [0005](0005-wake-word-ptbr.md) | Palavra de ativação "Alfred" em PT-BR com Vosk em duas etapas | Aceito (provisório) |
+| [0006](0006-skills-module.md) | Módulo de skills como camada acima de voz, IA e automação | Aceito |

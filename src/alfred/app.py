@@ -71,6 +71,7 @@ class Application:
         self.orchestrator: Orchestrator | None = None
         self.memory: Any = None
         self.triggers: Any = None
+        self.skills: Any = None
         self.ai: AIService | None = None
         self.overlay: Module | None = None
         self.virtual_cursor: Module | None = None
@@ -132,6 +133,7 @@ def bootstrap(
     models_root: Path | None = None,
     with_ui: bool = False,
     system_observers: bool = False,
+    skills: tuple[Any, ...] = (),
 ) -> tuple[Application, LoadResult]:
     """Monta a aplicação padrão a partir do diretório de dados.
 
@@ -368,10 +370,17 @@ def bootstrap(
         **trigger_observers,
     )
     modules.append(trigger_engine)
+    from alfred.skills.manager import SkillManager
+
+    skill_manager = SkillManager(settings, tool_registry, command_registry)
+    for skill in skills:
+        skill_manager.register(skill)
+    modules.append(skill_manager)
     app = create_application(modules, bus=bus)
     app.orchestrator = orchestrator
     app.memory = memory
     app.triggers = trigger_engine
+    app.skills = skill_manager
     app.settings = settings
     app.database = database
     app.tasks = tasks
@@ -422,6 +431,7 @@ def bootstrap(
             memory=lambda: app.memory,
             triggers=lambda: app.triggers,
             ai_providers=lambda: provider_locality(ai_registry),
+            skills=lambda: app.skills,
         )
         app.manager.register(settings_window)
         app.manager.register(

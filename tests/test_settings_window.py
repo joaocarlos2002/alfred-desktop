@@ -26,7 +26,7 @@ def test_every_rf013_section_is_listed(qt_app: QApplication, tmp_path: Path) -> 
     window, _ = window_for(tmp_path)
     titles = [window.sections.item(i).text() for i in range(window.sections.count())]
 
-    assert len(titles) == 13
+    assert len(titles) == len(SECTIONS) == 14
     for _, title, phase in SECTIONS:
         assert any(t.startswith(title) for t in titles)
         if phase is not None:
@@ -35,7 +35,8 @@ def test_every_rf013_section_is_listed(qt_app: QApplication, tmp_path: Path) -> 
 
 def test_forms_exist_only_for_real_sections(qt_app: QApplication, tmp_path: Path) -> None:
     window, _ = window_for(tmp_path)
-    assert set(window.forms) == set(Settings.section_names())
+    # Seções com página própria (lista gerenciada, não um formulário de campos).
+    assert set(window.forms) == set(Settings.section_names()) - {"skills"}
 
 
 def test_editors_match_field_types(qt_app: QApplication, tmp_path: Path) -> None:
@@ -188,3 +189,32 @@ def test_memory_section_starts_a_new_conversation(qt_app: QApplication, tmp_path
 
     assert "Nova conversa" in run_on_qt(scenario())
     assert calls == ["nova"]
+
+
+def test_skills_section_toggles_a_real_skill(qt_app: QApplication, tmp_path: Path) -> None:
+    from typing import ClassVar
+
+    from alfred.skills.base import Skill
+    from alfred.ui.settings_window import SkillsSection
+
+    class Demo(Skill):
+        key: ClassVar[str] = "demo"
+        name: ClassVar[str] = "Demonstração"
+        description: ClassVar[str] = "Skill de teste"
+
+    app, _ = bootstrap(tmp_path, skills=(Demo(),))
+
+    async def scenario() -> tuple[bool, bool]:
+        await app.manager.start_all()
+        section = SkillsSection(lambda: app.skills)
+        item = section.list.item(0)
+        assert "desligada" in item.text()
+        await section._apply(app.skills, "demo", True)
+        active = app.skills.statuses()[0].active
+        text_ok = "ativa" in section.list.item(0).text()
+        await app.manager.stop_all()
+        return active, text_ok
+
+    assert run_on_qt(scenario()) == (True, True)
+    assert app.settings is not None
+    assert app.settings.current.skills.enabled == ("demo",)
