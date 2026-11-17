@@ -16,12 +16,14 @@ from typing import Any, ClassVar, Literal, Union, get_args, get_origin
 from annotated_types import Ge, Le
 from pydantic import ValidationError
 from pydantic.fields import FieldInfo
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QPainter, QPaintEvent, QRadialGradient
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -30,6 +32,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QStackedWidget,
     QVBoxLayout,
@@ -44,6 +47,7 @@ from alfred.core.settings_service import SettingsService
 from alfred.domain.module import Module
 from alfred.domain.triggers import KIND_LABELS, SYSTEM_EVENTS, TriggerCondition, TriggerSpec
 from alfred.ui.assets import avatar_pixmap
+from alfred.ui.components import Card, Divider, EmptyState, SectionHeader, Toggle, fade_in
 from alfred.ui.icon import alfred_icon
 from alfred.ui.theme import THEME
 
@@ -53,19 +57,36 @@ logger = logging.getLogger(__name__)
 SECTIONS: list[tuple[str, str, str | None]] = [
     ("general", "Geral", None),
     ("appearance", "Aparência", None),
-    ("voice", "Voz", None),
     ("activation", "Ativação", None),
+    ("voice", "Voz", None),
     ("ai", "Inteligência artificial", None),
-    ("applications", "Aplicações", None),
-    ("cursor", "Cursor virtual", None),
-    ("triggers", "Gatilhos", None),
-    ("skills", "Skills", None),
     ("memory", "Memória", None),
+    ("skills", "Skills", None),
+    ("applications", "Aplicações", None),
+    ("triggers", "Gatilhos", None),
+    ("cursor", "Cursor virtual", None),
+    ("permissions", "Permissões", None),
     ("privacy", "Privacidade", None),
-    ("permissions", "Permissões", "Fase 5 — Inteligência artificial"),
     ("history", "Histórico", None),
     ("logging", "Registros (logs)", None),
 ]
+
+SECTION_INFO: dict[str, tuple[str, str]] = {
+    "general": ("Essencial", "Idioma e inicialização junto com o Windows."),
+    "appearance": ("Essencial", "Widget flutuante, tema e animações da interface."),
+    "activation": ("Essencial", "Atalhos globais para chamar e interromper o ALFRED."),
+    "voice": ("Voz", "Microfone, palavra de ativação, transcrição e a voz das respostas."),
+    "ai": ("Inteligência", "Provedor de IA, modelos e memória da conversa."),
+    "memory": ("Inteligência", "O que o ALFRED lembra sobre você — só neste computador."),
+    "skills": ("Inteligência", "Capacidades extras que você liga e desliga."),
+    "applications": ("Inteligência", "O que o ALFRED aprendeu sobre os seus programas."),
+    "triggers": ("Automação", "Ações automáticas por voz, atalho, horário e eventos."),
+    "cursor": ("Automação", "O cursor virtual que mostra onde o ALFRED está agindo."),
+    "permissions": ("Automação", "O que o ALFRED pode fazer sozinho e o que precisa perguntar."),
+    "privacy": ("Privacidade e dados", "Para onde vão os seus dados — e o que nunca sai daqui."),
+    "history": ("Privacidade e dados", "Tarefas executadas, com resultados reais."),
+    "logging": ("Privacidade e dados", "Registros técnicos para diagnóstico."),
+}
 
 FIELD_LABELS = {
     "language": "Idioma",
@@ -157,9 +178,8 @@ def build_editor(
         combo.setCurrentIndex(max(0, combo.findData(value)))
         return combo, combo.currentData
     if annotation is bool:
-        checkbox = QCheckBox()
-        checkbox.setChecked(bool(value))
-        return checkbox, checkbox.isChecked
+        toggle = Toggle(bool(value))
+        return toggle, toggle.isChecked
     if get_origin(annotation) is Literal:
         combo = QComboBox()
         for choice in get_args(annotation):
@@ -208,16 +228,24 @@ class SectionForm(QWidget):
         self.section = section
         self._choices = choices or {}
         self._getters: dict[str, Getter] = {}
-        self._form = QFormLayout(self)
-        self._form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
-        self._form.setVerticalSpacing(THEME.spacing.md)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._card = Card(padding=0)
+        outer.addWidget(self._card)
+        outer.addStretch()
         self.load(settings)
 
     def load(self, settings: Settings) -> None:
-        while self._form.rowCount():
-            self._form.removeRow(0)
+        body = self._card.body
+        while body.count():
+            item = body.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.setParent(None)  # some já da árvore (findChild não acha o antigo)
+                widget.deleteLater()
         self._getters.clear()
         current = settings.section(self.section)
+        first = True
         for name, info in type(current).model_fields.items():
             if name in HIDDEN_FIELDS:
                 continue
@@ -227,11 +255,12 @@ class SectionForm(QWidget):
             editor.setObjectName(name)
             if info.description:
                 editor.setToolTip(info.description)
+                editor.setAccessibleDescription(info.description)
             self._getters[name] = getter
-            label = QLabel(FIELD_LABELS.get(name, name))
-            if info.description:
-                label.setToolTip(info.description)
-            self._form.addRow(label, editor)
+            if not first:
+                body.addWidget(Divider())
+            first = False
+            body.addWidget(_setting_row(FIELD_LABELS.get(name, name), info.description, editor))
 
     def changes(self, settings: Settings) -> dict[str, Any]:
         """Campos cujo valor no formulário difere do atual. Raises: ValueError (ex.: JSON)."""
@@ -247,6 +276,30 @@ class SectionForm(QWidget):
         widget = self.findChild(QWidget, name)
         assert widget is not None, name
         return widget
+
+
+def _setting_row(title: str, hint: str | None, editor: QWidget) -> QWidget:
+    """Uma configuração: nome e explicação à esquerda, controle à direita."""
+    s = THEME.spacing
+    row = QWidget()
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(s.lg + s.xs, s.md, s.lg + s.xs, s.md)
+    layout.setSpacing(s.xl)
+    texts = QVBoxLayout()
+    texts.setSpacing(s.xxs)
+    name = QLabel(title)
+    name.setProperty("role", "setting")
+    texts.addWidget(name)
+    if hint:
+        explanation = QLabel(hint)
+        explanation.setProperty("role", "hint")
+        explanation.setWordWrap(True)
+        texts.addWidget(explanation)
+    layout.addLayout(texts, 1)
+    if isinstance(editor, QPlainTextEdit | QLineEdit | QComboBox):
+        editor.setMinimumWidth(240)
+    layout.addWidget(editor, 0, Qt.AlignmentFlag.AlignVCenter)
+    return row
 
 
 def _safe_choices(provider: Callable[[], list[str]]) -> list[str]:
@@ -268,6 +321,105 @@ class UnavailableSection(QWidget):
         message.setProperty("role", "muted")
         layout.addWidget(message)
         layout.addStretch()
+
+
+TOOL_CATEGORY_LABELS = {
+    "applications": ("Aplicativos", "Abrir e fechar programas."),
+    "windows": ("Janelas", "Focar, minimizar, maximizar e mover janelas."),
+    "ui": ("Botões e campos", "Clicar e preencher elementos via UI Automation."),
+    "input": ("Teclado e mouse", "Digitar e usar atalhos no programa em foco."),
+    "browser": ("Navegador", "Abrir e ler páginas no navegador do ALFRED."),
+    "screen": ("Tela", "Capturar e analisar a tela."),
+    "skills": ("Skills", "Ferramentas das skills (ex.: aprender programas)."),
+}
+POLICY_CHOICES = (("Padrão", None), ("Permitir", "allow"), ("Perguntar", "ask"), ("Negar", "deny"))
+
+
+class PermissionsSection(QWidget):
+    """Política por categoria de ação (PermissionService), com as sensíveis sempre confirmando."""
+
+    def __init__(
+        self, permissions: Callable[[], Any] | None, tools: Callable[[], Any] | None
+    ) -> None:
+        super().__init__()
+        self._permissions = permissions
+        self._tools = tools
+        self._pending: set[asyncio.Task[None]] = set()
+        self.combos: dict[str, QComboBox] = {}
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._card = Card(padding=0)
+        layout.addWidget(self._card)
+        note = QLabel(
+            "Padrão: leitura e ações comuns são permitidas; ações sensíveis perguntam. Categorias "
+            "sensíveis (arquivos, mensagens, compras, sistema) sempre pedem confirmação."
+        )
+        note.setWordWrap(True)
+        note.setProperty("role", "hint")
+        layout.addWidget(note)
+        self.feedback = QLabel()
+        self.feedback.setProperty("role", "muted")
+        layout.addWidget(self.feedback)
+        layout.addStretch()
+        self.reload()
+
+    def reload(self) -> None:
+        from alfred.core.permissions import ALWAYS_CONFIRM, CATEGORY_LABELS
+
+        body = self._card.body
+        while body.count():
+            item = body.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.setParent(None)  # some já da árvore (findChild não acha o antigo)
+                widget.deleteLater()
+        self.combos.clear()
+        service = self._permissions() if self._permissions is not None else None
+        registry = self._tools() if self._tools is not None else None
+        categories = sorted(set(registry.categories() if registry else []) | ALWAYS_CONFIRM)
+        if service is None:
+            self.feedback.setText("Serviço de permissões indisponível.")
+            return
+        for index, category in enumerate(categories):
+            sensitive = category in ALWAYS_CONFIRM
+            title, hint = TOOL_CATEGORY_LABELS.get(
+                category, (CATEGORY_LABELS.get(category, category).capitalize(), "")
+            )
+            combo = QComboBox()
+            for label, value in POLICY_CHOICES:
+                if sensitive and value == "allow":
+                    continue  # sensível nunca roda sem confirmação
+                combo.addItem(label, value)
+            current = service.category_policy(category)
+            combo.setCurrentIndex(max(0, combo.findData(current.value if current else None)))
+            combo.currentIndexChanged.connect(
+                lambda _i, c=category, box=combo: self._changed(c, box.currentData())
+            )
+            self.combos[category] = combo
+            if index:
+                body.addWidget(Divider())
+            hint = " ".join(p for p in (hint, "Sempre confirma." if sensitive else "") if p)
+            row = _setting_row(title, hint, combo)
+            body.addWidget(row)
+        self.feedback.setText(f"{len(categories)} categorias.")
+
+    def _changed(self, category: str, value: str | None) -> None:
+        service = self._permissions() if self._permissions is not None else None
+        if service is None or value is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(self._save(service, category, value))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def _save(self, service: Any, category: str, value: str) -> None:
+        from alfred.core.permissions import Policy
+
+        await service.set_policy(category, Policy(value))
+        self.feedback.setText("Permissão salva.")
 
 
 class HistorySection(QWidget):
@@ -296,19 +448,29 @@ class MemorySection(QWidget):
         self._memory = memory
         self._pending: set[asyncio.Task[None]] = set()
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(THEME.spacing.md)
         intro = QLabel(
-            "O que o ALFRED lembra sobre você. Fica só neste computador e é usado como contexto "
-            "da inteligência artificial. Dê dois cliques para editar."
+            "Usado como contexto da inteligência artificial. Dê dois cliques para editar."
         )
         intro.setWordWrap(True)
-        intro.setProperty("role", "muted")
+        intro.setProperty("role", "hint")
         self.list = QListWidget()
         self.list.itemChanged.connect(self._edited)
+        self.empty = EmptyState(
+            "Ainda não lembro de nada sobre você",
+            'Conte uma preferência ou um fato — por exemplo, "prefiro respostas curtas" — '
+            "e eu passo a levar isso em conta.",
+            image=avatar_pixmap(84),
+        )
         self.new_item = QLineEdit()
         self.new_item.setPlaceholderText("Ex.: Prefiro respostas curtas.")
         add = QPushButton("Lembrar")
+        add.setProperty("role", "primary")
+        self.new_item.returnPressed.connect(lambda: self._run(self._add()))
         add.clicked.connect(lambda: self._run(self._add()))
         delete = QPushButton("Excluir selecionada")
+        delete.setProperty("role", "ghost")
         delete.clicked.connect(lambda: self._run(self._delete()))
         forget = QPushButton("Esquecer tudo")
         forget.setProperty("role", "danger")
@@ -329,8 +491,9 @@ class MemorySection(QWidget):
         actions.addWidget(self.new_chat)
         actions.addStretch()
         actions.addWidget(forget)
-        for widget in (intro, self.list):
-            layout.addWidget(widget)
+        for widget in (intro, self.list, self.empty):
+            layout.addWidget(widget, 1 if widget is not intro else 0)
+        self.empty.hide()
         layout.addLayout(row)
         layout.addLayout(actions)
         layout.addWidget(self.feedback)
@@ -362,7 +525,10 @@ class MemorySection(QWidget):
             entry.setFlags(entry.flags() | Qt.ItemFlag.ItemIsEditable)
             self.list.addItem(entry)
         self.list.blockSignals(False)
-        self.feedback.setText(f"{self.list.count()} memória(s).")
+        has_items = self.list.count() > 0
+        self.list.setVisible(has_items)
+        self.empty.setVisible(not has_items)  # estado vazio com orientação (mascote)
+        self.feedback.setText(f"{self.list.count()} memória(s)." if has_items else "")
 
     async def _add(self) -> None:
         text = self.new_item.text().strip()
@@ -821,6 +987,20 @@ class PrivacyPage(QWidget):
         layout.addWidget(form, 1)
 
 
+class GlowPanel(QWidget):
+    """Fundo preto profundo com um brilho dourado muito suave no alto (profundidade, sem neon)."""
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), THEME.color("void"))
+        glow = QRadialGradient(
+            QPointF(self.width() * 0.85, -self.height() * 0.15), self.width() * 0.7
+        )
+        glow.setColorAt(0.0, THEME.color("gold", 26))
+        glow.setColorAt(1.0, THEME.color("gold", 0))
+        painter.fillRect(self.rect(), glow)
+
+
 class SettingsWindow(QWidget):
     def __init__(
         self,
@@ -832,24 +1012,61 @@ class SettingsWindow(QWidget):
         triggers: Callable[[], Any] | None = None,
         ai_providers: Callable[[], Mapping[str, bool]] | None = None,
         skills: Callable[[], Any] | None = None,
+        permissions: Callable[[], Any] | None = None,
+        tools: Callable[[], Any] | None = None,
     ) -> None:
         super().__init__(None, Qt.WindowType.Window)
         self.setWindowTitle("ALFRED — Configurações")
         self.setWindowIcon(alfred_icon())
-        self.resize(780, 600)
+        self.resize(1040, 720)
+        self.setMinimumSize(860, 560)
         self._settings = settings
         self.forms: dict[str, SectionForm] = {}
         self._pending: set[asyncio.Task[bool]] = set()
+        self._keys: list[str] = []
         s = THEME.spacing
 
         root = QHBoxLayout(self)
-        root.setContentsMargins(s.lg, s.lg, s.lg, s.lg)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # ---------------------------------------------------------------- barra lateral
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(272)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(s.lg, s.xl, s.lg, s.lg)
+        side.setSpacing(s.lg)
+        brand = QHBoxLayout()
+        brand.setSpacing(s.md)
+        avatar = QLabel()
+        avatar.setPixmap(avatar_pixmap(44))
+        names = QVBoxLayout()
+        names.setSpacing(0)
+        name = QLabel("ALFRED")
+        name.setProperty("role", "brand")
+        motto = QLabel("Sempre a seu serviço")
+        motto.setProperty("role", "hint")
+        names.addWidget(name)
+        names.addWidget(motto)
+        brand.addWidget(avatar)
+        brand.addLayout(names, 1)
+        side.addLayout(brand)
         self.sections = QListWidget()
         self.sections.setObjectName("sections")
-        self.sections.setFixedWidth(250)
         self.sections.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        side.addWidget(self.sections, 1)
+
+        # ---------------------------------------------------------------- páginas
         self.pages = QStackedWidget()
+        group = None
         for key, title, phase in SECTIONS:
+            section_group = SECTION_INFO.get(key, ("", ""))[0]
+            if section_group != group:
+                group = section_group
+                header = QListWidgetItem(group.upper())
+                header.setFlags(Qt.ItemFlag.NoItemFlags)  # rótulo de grupo, não selecionável
+                self.sections.addItem(header)
             item = QListWidgetItem(title if phase is None else f"{title}  ·  em breve")
             item.setData(Qt.ItemDataRole.UserRole, key)
             if phase is not None:
@@ -866,6 +1083,8 @@ class SettingsWindow(QWidget):
                 page = SkillsSection(skills)
             elif key == "applications":
                 page = ApplicationsSection(skills)
+            elif key == "permissions":
+                page = PermissionsSection(permissions, tools)
             elif key == "privacy":
                 form = SectionForm(key, settings.current, choices)
                 self.forms[key] = form
@@ -877,42 +1096,77 @@ class SettingsWindow(QWidget):
                 self.forms[key] = form
                 page = form
             self.sections.addItem(item)
-            self.pages.addWidget(page)
-        self.sections.currentRowChanged.connect(self.pages.setCurrentIndex)
-        self.sections.setCurrentRow(0)
+            self._keys.append(key)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setViewportMargins(0, 0, s.md, 0)  # barra de rolagem fora do cartão
+            scroll.setWidget(page)
+            self.pages.addWidget(scroll)
 
-        right = QVBoxLayout()
-        header = QHBoxLayout()
-        avatar = QLabel()
-        avatar.setPixmap(avatar_pixmap(40))
-        title_label = QLabel("Configurações")
-        title_label.setProperty("role", "title")
-        header.addWidget(avatar)
-        header.addSpacing(s.sm)
-        header.addWidget(title_label)
-        header.addStretch()
-        right.addLayout(header)
-        right.addWidget(self.pages, 1)
+        content = GlowPanel()
+        right = QVBoxLayout(content)
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(0)
+        page_area = QVBoxLayout()
+        page_area.setContentsMargins(s.xxl + s.sm, s.xxl, s.xxl + s.sm, s.lg)
+        page_area.setSpacing(s.lg)
+        self.header = SectionHeader("", "", overline=" ")
+        page_area.addWidget(self.header)
+        page_area.addWidget(self.pages, 1)
+        right.addLayout(page_area, 1)
+
+        actionbar = QFrame()
+        actionbar.setObjectName("actionbar")
+        self.actionbar = actionbar
+        bar = QHBoxLayout(actionbar)
+        bar.setContentsMargins(s.xxl + s.sm, s.md, s.xxl + s.sm, s.md)
         self.feedback = QLabel()
         self.feedback.setWordWrap(True)
         self.revert_button = QPushButton("Desfazer alterações")
+        self.revert_button.setProperty("role", "ghost")
         self.apply_button = QPushButton("Aplicar")
         self.apply_button.setProperty("role", "primary")
+        self.apply_button.setMinimumWidth(120)
         self.revert_button.clicked.connect(self.reload)
         self.apply_button.clicked.connect(self._apply_clicked)
-        buttons = QHBoxLayout()
-        buttons.addWidget(self.feedback, 1)
-        buttons.addWidget(self.revert_button)
-        buttons.addWidget(self.apply_button)
-        right.addLayout(buttons)
+        bar.addWidget(self.feedback, 1)
+        bar.addWidget(self.revert_button)
+        bar.addWidget(self.apply_button)
+        right.addWidget(actionbar)
 
-        root.addWidget(self.sections)
-        root.addLayout(right, 1)
+        root.addWidget(sidebar)
+        root.addWidget(content, 1)
+        self.sections.currentRowChanged.connect(self._on_row)
+        self.select(SECTIONS[0][0])
+
+    def _on_row(self, row: int) -> None:
+        item = self.sections.item(row)
+        key = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if key is None:
+            return
+        index = self._keys.index(key)
+        self.pages.setCurrentIndex(index)
+        group, description = SECTION_INFO.get(key, ("", ""))
+        title = next(t for k, t, _ in SECTIONS if k == key)
+        overline = self.header.findChild(QLabel)
+        if overline is not None and overline is not self.header.title:
+            overline.setText(group.upper())
+            overline.setVisible(group.casefold() != title.casefold())  # sem "VOZ / Voz"
+        self.header.title.setText(title)
+        self.header.subtitle.setText(description)
+        self.header.subtitle.setVisible(bool(description))
+        # Aplicar/Desfazer só onde há formulário; as outras páginas salvam sozinhas.
+        self.actionbar.setVisible(key in self.forms)
+        current = self.pages.currentWidget()
+        if current is not None:
+            fade_in(current)
 
     def select(self, key: str) -> None:
         for row in range(self.sections.count()):
             if self.sections.item(row).data(Qt.ItemDataRole.UserRole) == key:
                 self.sections.setCurrentRow(row)
+                self._on_row(row)
 
     def reload(self) -> None:
         for form in self.forms.values():
@@ -989,11 +1243,15 @@ class SettingsWindowModule(Module):
         triggers: Callable[[], Any] | None = None,
         ai_providers: Callable[[], Mapping[str, bool]] | None = None,
         skills: Callable[[], Any] | None = None,
+        permissions: Callable[[], Any] | None = None,
+        tools: Callable[[], Any] | None = None,
     ) -> None:
         self._memory = memory
         self._triggers = triggers
         self._ai_providers = ai_providers
         self._skills = skills
+        self._permissions = permissions
+        self._tools = tools
         self._bus = bus
         self._settings = settings
         self._on_open_panel = on_open_panel
@@ -1024,6 +1282,8 @@ class SettingsWindowModule(Module):
                 triggers=self._triggers,
                 ai_providers=self._ai_providers,
                 skills=self._skills,
+                permissions=self._permissions,
+                tools=self._tools,
             )
         else:
             self.window.reload()

@@ -44,6 +44,9 @@ class Colors:
     """Hover e estados ativos de superfície."""
     border_soft: str = "#1E1E23"
     """Borda quase invisível que separa camadas."""
+    highlight: str = "#2D2D34"
+    """Aresta superior iluminada dos cartões (luz vinda de cima)."""
+    """Borda quase invisível que separa camadas."""
     text: str = "#F2F0EC"
     text_secondary: str = "#BFC1C6"
     text_muted: str = "#8C8E95"
@@ -69,10 +72,10 @@ class Typography:
     fallback: str = "Segoe UI"
     size_caption: float = 8.0
     size_small: float = 9.0
-    size_body: float = 10.0
-    size_subtitle: float = 11.5
-    size_title: float = 14.0
-    size_display: float = 20.0
+    size_body: float = 10.5
+    size_subtitle: float = 12.0
+    size_title: float = 15.0
+    size_display: float = 22.0
     weight_regular: int = 400
     weight_medium: int = 500
     weight_title: int = 600
@@ -193,11 +196,12 @@ def build_stylesheet(theme: Theme = THEME) -> str:
     c, s, r, t = theme.colors, theme.spacing, theme.radius, theme.typography
     return f"""
 QWidget {{
-    background-color: {c.obsidian};
+    background-color: transparent;
     color: {c.text};
     font-family: "{t.family}", "{t.fallback}";
     font-size: {t.size_body}pt;
 }}
+QMainWindow, QDialog, QWidget#window {{ background-color: {c.obsidian}; }}
 QToolTip {{
     background-color: {c.graphite};
     color: {c.text};
@@ -292,14 +296,19 @@ QProgressBar {{
 }}
 QProgressBar::chunk {{ background-color: {c.accent}; border-radius: {r.pill}px; }}
 QListWidget#sections {{
-    padding: {s.sm}px; background-color: {c.void}; border: none;
+    padding: {s.sm}px; background-color: transparent; border: none;
 }}
 QListWidget#sections::item {{
-    padding: {s.sm}px {s.md}px; border-radius: {r.md}px; color: {c.text_secondary};
+    padding: {s.xs + 2}px {s.md}px; margin: 1px 0; border-radius: {r.md}px;
+    color: {c.text_secondary};
 }}
-QListWidget#sections::item:hover {{ background-color: {c.graphite}; color: {c.text}; }}
+QListWidget#sections::item:hover {{ background-color: {c.surface_2}; color: {c.text}; }}
 QListWidget#sections::item:selected {{
-    background-color: {c.graphite}; color: {c.accent_strong};
+    background-color: {c.accent_soft}; color: {c.accent_strong};
+}}
+QListWidget#sections::item:disabled {{
+    color: {c.accent}; font-size: {t.size_caption}pt;
+    font-weight: {t.weight_title}; padding-top: {s.md}px; background: transparent;
 }}
 QScrollBar:vertical {{ background: transparent; width: 8px; margin: 2px; }}
 QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 2px; }}
@@ -337,8 +346,21 @@ QLabel[role="chip"][tone="accent"] {{ color: {c.accent_strong}; border-color: {c
 QLabel[role="chip"][tone="success"] {{ color: {c.success}; border-color: {c.success}; }}
 QLabel[role="chip"][tone="error"] {{ color: {c.error}; border-color: {c.error}; }}
 QFrame[role="card"] {{
-    background-color: {c.graphite}; border: 1px solid {c.border_soft}; border-radius: {r.lg}px;
+    background-color: {c.graphite}; border: 1px solid {c.border_soft};
+    border-top: 1px solid {c.highlight}; border-radius: {r.lg}px;
 }}
+QFrame#sidebar {{ background-color: {c.graphite}; border-right: 1px solid {c.border_soft}; }}
+QFrame#actionbar {{
+    background-color: {c.graphite}; border-top: 1px solid {c.border_soft};
+}}
+QScrollArea, QScrollArea > QWidget > QWidget {{ background: transparent; border: none; }}
+QLabel[role="brand"] {{
+    font-family: "{t.display_family}", "{t.fallback}";
+    font-size: {t.size_subtitle + 2}pt; font-weight: {t.weight_title}; color: {c.text};
+    letter-spacing: 2pt;
+}}
+QLabel[role="setting"] {{ font-size: {t.size_body}pt; font-weight: {t.weight_medium}; }}
+QLabel[role="hint"] {{ color: {c.text_muted}; font-size: {t.size_small}pt; }}
 QFrame[role="card"][level="2"] {{ background-color: {c.surface_2}; }}
 QFrame[role="divider"] {{ background-color: {c.border_soft}; max-height: 1px; border: none; }}
 QCheckBox {{ spacing: {s.sm}px; }}

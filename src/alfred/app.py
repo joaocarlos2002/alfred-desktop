@@ -470,6 +470,8 @@ def bootstrap(
             triggers=lambda: app.triggers,
             ai_providers=lambda: provider_locality(ai_registry),
             skills=lambda: app.skills,
+            permissions=lambda: app.permissions,
+            tools=lambda: app.tools,
         )
         app.manager.register(settings_window)
         app.manager.register(

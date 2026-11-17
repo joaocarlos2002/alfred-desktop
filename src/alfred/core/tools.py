@@ -89,6 +89,9 @@ class ToolRegistry:
         if self._allowed is not None:
             self._allowed.discard(name)
 
+    def categories(self) -> list[str]:
+        return sorted({tool.category for tool in self._tools.values()})
+
     def allow_only(self, names: set[str]) -> None:
         unknown = names - set(self._tools)
         if unknown:

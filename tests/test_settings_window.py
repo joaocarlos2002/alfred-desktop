@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLineEdit, QSpinBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QComboBox, QLineEdit, QSpinBox
 
 from alfred.app import bootstrap
 from alfred.config.settings import Settings
+from alfred.ui.components import Toggle
 from alfred.ui.qt_runtime import ensure_qt_application, run_on_qt
 from alfred.ui.settings_window import SECTIONS, SettingsWindow, SettingsWindowModule
 
@@ -24,9 +26,13 @@ def window_for(tmp_path: Path) -> tuple[SettingsWindow, object]:
 
 def test_every_rf013_section_is_listed(qt_app: QApplication, tmp_path: Path) -> None:
     window, _ = window_for(tmp_path)
-    titles = [window.sections.item(i).text() for i in range(window.sections.count())]
+    items = [window.sections.item(i) for i in range(window.sections.count())]
+    # rótulos de grupo (Essencial, Voz, Inteligência...) não são seções selecionáveis
+    titles = [i.text() for i in items if i.data(Qt.ItemDataRole.UserRole) is not None]
+    groups = [i.text() for i in items if i.data(Qt.ItemDataRole.UserRole) is None]
 
     assert len(titles) == len(SECTIONS) == 14
+    assert groups == ["ESSENCIAL", "VOZ", "INTELIGÊNCIA", "AUTOMAÇÃO", "PRIVACIDADE E DADOS"]
     for _, title, phase in SECTIONS:
         assert any(t.startswith(title) for t in titles)
         if phase is not None:
@@ -42,7 +48,7 @@ def test_forms_exist_only_for_real_sections(qt_app: QApplication, tmp_path: Path
 def test_editors_match_field_types(qt_app: QApplication, tmp_path: Path) -> None:
     window, _ = window_for(tmp_path)
 
-    assert isinstance(window.forms["general"].editor("start_with_windows"), QCheckBox)
+    assert isinstance(window.forms["general"].editor("start_with_windows"), Toggle)
     assert isinstance(window.forms["privacy"].editor("screen_capture"), QComboBox)
     assert isinstance(window.forms["activation"].editor("activate_hotkey"), QLineEdit)
     spin = window.forms["logging"].editor("backup_count")
@@ -102,7 +108,7 @@ def test_invalid_value_shows_error_and_changes_nothing(
 def test_revert_restores_saved_values(qt_app: QApplication, tmp_path: Path) -> None:
     window, _ = window_for(tmp_path)
     checkbox = window.forms["general"].editor("start_with_windows")
-    assert isinstance(checkbox, QCheckBox)
+    assert isinstance(checkbox, Toggle)
     checkbox.setChecked(True)
 
     window.reload()
@@ -218,3 +224,57 @@ def test_skills_section_toggles_a_real_skill(qt_app: QApplication, tmp_path: Pat
     assert run_on_qt(scenario()) == (True, True)
     assert app.settings is not None
     assert "demo" in app.settings.current.skills.enabled
+
+
+def test_permissions_page_saves_real_policies(qt_app: QApplication, tmp_path: Path) -> None:
+    from alfred.core.permissions import Policy
+    from alfred.ui.settings_window import PermissionsSection
+
+    app, _ = bootstrap(tmp_path)
+
+    async def scenario() -> tuple[list[str], Policy | None, bool]:
+        import asyncio
+
+        await app.manager.start_all()
+        section = PermissionsSection(lambda: app.permissions, lambda: app.tools)
+        files = section.combos["files"]
+        options = [files.itemData(i) for i in range(files.count())]
+        section._changed("messages", "deny")
+        await asyncio.sleep(0.1)
+        assert app.permissions is not None
+        saved = app.permissions.category_policy("messages")
+        section.reload()
+        reloaded = section.combos["messages"].currentData() == "deny"
+        await app.manager.stop_all()
+        return options, saved, reloaded
+
+    options, saved, reloaded = run_on_qt(scenario())
+    assert "allow" not in options  # categoria sensível nunca pode rodar sem confirmação
+    assert saved is Policy.DENY
+    assert reloaded
+
+
+def test_memory_empty_state_and_action_bar(qt_app: QApplication, tmp_path: Path) -> None:
+    from alfred.ui.settings_window import MemorySection
+
+    app, _ = bootstrap(tmp_path)
+
+    async def scenario() -> tuple[bool, bool, bool, bool]:
+        await app.manager.start_all()
+        window = SettingsWindow(app.settings, memory=lambda: app.memory)  # type: ignore[arg-type]
+        window.show()
+        window.select("memory")
+        section = window.findChild(MemorySection)
+        assert section is not None
+        await section.reload()
+        empty_shown = section.empty.isVisibleTo(window)
+        bar_on_memory = window.actionbar.isVisibleTo(window)
+        await app.memory.remember("Prefiro respostas curtas")
+        await section.reload()
+        list_shown = section.list.isVisibleTo(window) and not section.empty.isVisibleTo(window)
+        window.select("general")
+        bar_on_form = window.actionbar.isVisibleTo(window)
+        await app.manager.stop_all()
+        return empty_shown, bar_on_memory, list_shown, bar_on_form
+
+    assert run_on_qt(scenario()) == (True, False, True, True)
