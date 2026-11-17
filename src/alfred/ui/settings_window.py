@@ -60,6 +60,7 @@ SECTIONS: list[tuple[str, str, str | None]] = [
     ("activation", "Ativação", None),
     ("voice", "Voz", None),
     ("ai", "Inteligência artificial", None),
+    ("profile", "Perfil", None),
     ("memory", "Memória", None),
     ("skills", "Skills", None),
     ("applications", "Aplicações", None),
@@ -77,6 +78,7 @@ SECTION_INFO: dict[str, tuple[str, str]] = {
     "activation": ("Essencial", "Atalhos globais para chamar e interromper o ALFRED."),
     "voice": ("Voz", "Microfone, palavra de ativação, transcrição e a voz das respostas."),
     "ai": ("Inteligência", "Provedor de IA, modelos e memória da conversa."),
+    "profile": ("Inteligência", "Como o ALFRED fala com você: tamanho, tom e tratamento."),
     "memory": ("Inteligência", "O que o ALFRED lembra sobre você — só neste computador."),
     "skills": ("Inteligência", "Capacidades extras que você liga e desliga."),
     "applications": ("Inteligência", "O que o ALFRED aprendeu sobre os seus programas."),
@@ -121,6 +123,10 @@ FIELD_LABELS = {
     "speed": "Velocidade (px/s)",
     "size": "Tamanho (px)",
     "learning_mode": "Aprender com as conversas",
+    "response_length": "Tamanho das respostas",
+    "tone": "Tom",
+    "address": "Como chamar você",
+    "use_habits": "Usar meus hábitos",
     "conversation_turns": "Trocas lembradas da conversa",
     "conversation_idle_minutes": "Nova conversa após (min)",
     "conversation_char_budget": "Tamanho do contexto da conversa",
@@ -142,6 +148,10 @@ CHOICE_LABELS = {
     "sapi": "Windows (SAPI)",
     "piper": "Neural local (Piper)",
     "suggest": "Sugerir para eu aprovar",
+    "short": "Curtas",
+    "detailed": "Detalhadas",
+    "formal": "Formal",
+    "casual": "Descontraído",
     "auto": "Automático",
     "off": "Desligado",
 }
@@ -1045,6 +1055,30 @@ class PrivacyOverview(QWidget):
         )
 
 
+class ProfilePage(QWidget):
+    """Perfil (#121): o formulário e um botão para voltar tudo ao padrão."""
+
+    def __init__(self, form: SectionForm, on_reset: Callable[[], None]) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(form)
+        hint = QLabel(
+            'Também dá para ajustar falando: "respostas mais curtas", "seja mais formal", '
+            '"me chame de ...", "não faça mais isso" ou "redefinir meu perfil".'
+        )
+        hint.setWordWrap(True)
+        hint.setProperty("role", "hint")
+        self.reset_button = QPushButton("Redefinir perfil")
+        self.reset_button.setProperty("role", "ghost")
+        self.reset_button.clicked.connect(on_reset)
+        row = QHBoxLayout()
+        row.addWidget(hint, 1)
+        row.addWidget(self.reset_button)
+        layout.addLayout(row)
+        layout.addStretch()
+
+
 class PrivacyPage(QWidget):
     def __init__(self, form: SectionForm, overview: PrivacyOverview) -> None:
         super().__init__()
@@ -1151,6 +1185,10 @@ class SettingsWindow(QWidget):
                 page = ApplicationsSection(skills)
             elif key == "permissions":
                 page = PermissionsSection(permissions, tools)
+            elif key == "profile":
+                form = SectionForm(key, settings.current, choices)
+                self.forms[key] = form
+                page = ProfilePage(form, self._reset_profile)
             elif key == "privacy":
                 form = SectionForm(key, settings.current, choices)
                 self.forms[key] = form
@@ -1244,6 +1282,22 @@ class SettingsWindow(QWidget):
         for triggers in self.findChildren(TriggersSection):
             triggers._run(triggers.reload())
         self._set_feedback("", error=False)
+
+    def _reset_profile(self) -> None:
+        from alfred.config.settings import ProfileSettings
+
+        async def reset() -> bool:
+            await self._settings.update("profile", **ProfileSettings().model_dump())
+            self.forms["profile"].load(self._settings.current)
+            self._set_feedback("Perfil redefinido para o padrão.", error=False)
+            return True
+
+        try:
+            task = asyncio.get_running_loop().create_task(reset())
+        except RuntimeError:
+            return
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
 
     def _apply_clicked(self) -> None:
         task = asyncio.ensure_future(self.apply())
