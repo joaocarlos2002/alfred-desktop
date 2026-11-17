@@ -41,6 +41,10 @@ class SettingsService(Module):
     async def stop(self) -> None:
         return None
 
+    @property
+    def bus(self) -> EventBus:
+        return self._bus
+
     async def update(self, section: str, **changes: Any) -> Settings:
         """Aplica, valida, persiste e publica ``SettingsChanged`` se algo mudou.
 

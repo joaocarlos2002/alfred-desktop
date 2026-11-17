@@ -138,6 +138,11 @@ class LoggingSettings(Section):
     backup_count: int = Field(default=5, ge=0, le=50)
 
 
+class SkillsSettings(Section):
+    enabled: tuple[str, ...] = ()
+    """Skills habilitadas (gerenciadas na seção Skills das configurações)."""
+
+
 class PrivacySettings(Section):
     network_enabled: bool = False
     """Permite acesso à rede (ex.: provedores externos de IA). Local-first: desligado."""
@@ -157,6 +162,7 @@ class Settings(BaseModel):
     cursor: CursorSettings = Field(default_factory=CursorSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     privacy: PrivacySettings = Field(default_factory=PrivacySettings)
+    skills: SkillsSettings = Field(default_factory=SkillsSettings)
 
     @classmethod
     def section_names(cls) -> tuple[str, ...]:

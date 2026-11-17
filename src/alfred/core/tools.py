@@ -83,6 +83,12 @@ class ToolRegistry:
             raise ValueError(f"Ferramenta duplicada: {tool.name}")
         self._tools[tool.name] = tool
 
+    def unregister(self, name: str) -> None:
+        """Remove a ferramenta (ex.: skill desligada). Ignora nomes desconhecidos."""
+        self._tools.pop(name, None)
+        if self._allowed is not None:
+            self._allowed.discard(name)
+
     def allow_only(self, names: set[str]) -> None:
         unknown = names - set(self._tools)
         if unknown:

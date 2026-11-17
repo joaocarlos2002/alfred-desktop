@@ -116,6 +116,7 @@ name = "Camadas do Modular Monolith"
 type = "layers"
 layers = [
     "alfred.ui",
+    "alfred.skills",
     "alfred.ai | alfred.voice | alfred.automation | alfred.triggers | alfred.memory",
     "alfred.core",
     "alfred.infrastructure",

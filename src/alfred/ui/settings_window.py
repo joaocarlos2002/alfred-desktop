@@ -59,6 +59,7 @@ SECTIONS: list[tuple[str, str, str | None]] = [
     ("applications", "Aplicações", "Fase 4 — Automação"),
     ("cursor", "Cursor virtual", None),
     ("triggers", "Gatilhos", None),
+    ("skills", "Skills", None),
     ("memory", "Memória", None),
     ("privacy", "Privacidade", None),
     ("permissions", "Permissões", "Fase 5 — Inteligência artificial"),
@@ -617,6 +618,73 @@ def _first_error(exc: Exception) -> str:
     return str(exc)
 
 
+class SkillsSection(QWidget):
+    """Liga e desliga skills (#123); mostra se cada uma está ativa ou com problema."""
+
+    def __init__(self, skills: Callable[[], Any] | None) -> None:
+        super().__init__()
+        self._skills = skills
+        self._pending: set[asyncio.Task[None]] = set()
+        layout = QVBoxLayout(self)
+        intro = QLabel(
+            "Skills são capacidades extras do ALFRED. Marque para ativar; as ferramentas de cada "
+            "skill continuam passando pelas mesmas permissões e confirmações."
+        )
+        intro.setWordWrap(True)
+        intro.setProperty("role", "muted")
+        self.list = QListWidget()
+        self.list.itemChanged.connect(self._toggled)
+        self.feedback = QLabel()
+        self.feedback.setWordWrap(True)
+        self.feedback.setProperty("role", "muted")
+        for widget in (intro, self.list, self.feedback):
+            layout.addWidget(widget)
+        self.reload()
+
+    def _manager(self) -> Any:
+        return self._skills() if self._skills is not None else None
+
+    def reload(self) -> None:
+        manager = self._manager()
+        self.list.blockSignals(True)
+        self.list.clear()
+        statuses = manager.statuses() if manager is not None else []
+        for status in statuses:
+            state = (
+                "ativa" if status.active else ("com problema" if status.problem else "desligada")
+            )
+            item = QListWidgetItem(f"{status.name} — {status.description}  ({state})")
+            item.setData(Qt.ItemDataRole.UserRole, status.key)
+            item.setToolTip(status.problem or status.description)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if status.enabled else Qt.CheckState.Unchecked)
+            self.list.addItem(item)
+        self.list.blockSignals(False)
+        self.feedback.setText(
+            "Nenhuma skill instalada."
+            if not statuses
+            else f"{len(statuses)} skill(s) disponível(is)."
+        )
+
+    def _toggled(self, item: QListWidgetItem) -> None:
+        manager = self._manager()
+        if manager is None:
+            return
+        enabled = item.checkState() == Qt.CheckState.Checked
+        key = str(item.data(Qt.ItemDataRole.UserRole))
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(self._apply(manager, key, enabled))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def _apply(self, manager: Any, key: str, enabled: bool) -> None:
+        await manager.set_enabled(key, enabled)
+        self.reload()
+
+
 class PrivacyOverview(QWidget):
     """Estado de cada fluxo de dados (Seção 9): o que fica no computador e o que pode sair."""
 
@@ -670,6 +738,7 @@ class SettingsWindow(QWidget):
         memory: Callable[[], Any] | None = None,
         triggers: Callable[[], Any] | None = None,
         ai_providers: Callable[[], Mapping[str, bool]] | None = None,
+        skills: Callable[[], Any] | None = None,
     ) -> None:
         super().__init__(None, Qt.WindowType.Window)
         self.setWindowTitle("ALFRED — Configurações")
@@ -700,6 +769,8 @@ class SettingsWindow(QWidget):
                 page = MemorySection(memory)
             elif key == "triggers":
                 page = TriggersSection(triggers)
+            elif key == "skills":
+                page = SkillsSection(skills)
             elif key == "privacy":
                 form = SectionForm(key, settings.current, choices)
                 self.forms[key] = form
@@ -822,10 +893,12 @@ class SettingsWindowModule(Module):
         memory: Callable[[], Any] | None = None,
         triggers: Callable[[], Any] | None = None,
         ai_providers: Callable[[], Mapping[str, bool]] | None = None,
+        skills: Callable[[], Any] | None = None,
     ) -> None:
         self._memory = memory
         self._triggers = triggers
         self._ai_providers = ai_providers
+        self._skills = skills
         self._bus = bus
         self._settings = settings
         self._on_open_panel = on_open_panel
@@ -855,6 +928,7 @@ class SettingsWindowModule(Module):
                 memory=self._memory,
                 triggers=self._triggers,
                 ai_providers=self._ai_providers,
+                skills=self._skills,
             )
         else:
             self.window.reload()
