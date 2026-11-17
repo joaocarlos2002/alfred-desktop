@@ -19,6 +19,7 @@ from alfred.core.settings_service import SettingsService
 from alfred.domain.assistant import STATE_LABELS, AssistantState, AssistantStateChanged
 from alfred.domain.module import Module
 from alfred.ui.icon import render_icon_pixmap
+from alfred.ui.motion import MOTION
 from alfred.ui.theme import THEME, Theme
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ class FloatingWidget(QWidget):
         self.update()
 
     def _sync_animation(self) -> None:
-        animated = self._animations and self._state in SPINNING | PULSING
+        animated = self._animations and not MOTION.reduced and self._state in SPINNING | PULSING
         if animated and not self.animating:
             self._animation.start()
         elif not animated and self.animating:

@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QTimer, QVariantAnimation
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, QVariantAnimation
 from PySide6.QtGui import QPainter, QPainterPath, QPen, QPolygonF
 
 from alfred.config.events import SettingsChanged
@@ -20,6 +20,7 @@ from alfred.core.event_bus import EventBus, Subscription
 from alfred.core.settings_service import SettingsService
 from alfred.domain.module import Module
 from alfred.domain.screen import ScreenRect, VirtualCursor
+from alfred.ui.motion import MOTION
 from alfred.ui.overlay import OverlayAnnotator, OverlayWindow, current_monitors, physical_to_logical
 from alfred.ui.theme import THEME
 
@@ -47,11 +48,11 @@ class CursorLayer:
         self._ripples: list[_Ripple] = []
 
         self._move = QVariantAnimation(overlay)
-        self._move.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._move.setEasingCurve(THEME.motion.easing("standard"))
         self._move.valueChanged.connect(self._on_move)
 
         self._frame = QTimer(overlay)
-        self._frame.setInterval(1000 // THEME.motion.fps)
+        self._frame.setInterval(THEME.motion.frame_ms)
         self._frame.timeout.connect(self._on_frame)
 
         self._idle = QTimer(overlay)
@@ -83,6 +84,8 @@ class CursorLayer:
         self._move.stop()
         self._move.setStartValue(start)
         self._move.setEndValue(target)
+        if MOTION.reduced:
+            duration = 0  # movimento reduzido: o cursor aparece direto no alvo
         self._move.setDuration(duration)
         self._move.start()
         return duration

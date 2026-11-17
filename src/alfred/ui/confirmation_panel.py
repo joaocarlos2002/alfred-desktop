@@ -97,7 +97,7 @@ class ConfirmationPanel(QWidget):
         layout.addLayout(buttons)
 
         self._ticker = QTimer(self)
-        self._ticker.setInterval(250)
+        self._ticker.setInterval(THEME.motion.ticker_ms)
         self._ticker.timeout.connect(self._tick)
 
     # ------------------------------------------------------------------ fila
