@@ -63,15 +63,49 @@ class SqlMemoryRepository:
 
         return await self._db.run(work)
 
-    async def add_message(self, conversation_id: str | None, role: str, content: str) -> str:
+    async def add_message(
+        self,
+        conversation_id: str | None,
+        role: str,
+        content: str,
+        at: datetime | None = None,
+    ) -> str:
         def work(session: Session) -> str:
             cid = conversation_id
             if cid is None or session.get(Conversation, cid) is None:
                 cid = cid or str(uuid4())
                 session.add(Conversation(id=cid, title=content[:80] if role == "user" else None))
                 session.flush()
-            session.add(Message(conversation_id=cid, role=role, content=content))
+            message = Message(conversation_id=cid, role=role, content=content)
+            if at is not None:
+                message.created_at = at
+            session.add(message)
             return cid
+
+        return await self._db.run(work)
+
+    async def recent_messages(
+        self, conversation_id: str, limit: int
+    ) -> builtins.list[tuple[str, str, datetime]]:
+        """Últimas ``limit`` mensagens da conversa, da mais antiga para a mais nova."""
+
+        def work(session: Session) -> builtins.list[tuple[str, str, datetime]]:
+            rows = session.scalars(
+                select(Message)
+                .where(Message.conversation_id == conversation_id)
+                .order_by(Message.id.desc())
+                .limit(limit)
+            )
+            return [(m.role, m.content, m.created_at) for m in rows][::-1]
+
+        return await self._db.run(work)
+
+    async def latest_message(self) -> tuple[str, datetime] | None:
+        """(conversa, horário) da mensagem mais recente, para continuar após reiniciar."""
+
+        def work(session: Session) -> tuple[str, datetime] | None:
+            row = session.scalars(select(Message).order_by(Message.id.desc()).limit(1)).first()
+            return (row.conversation_id, row.created_at) if row is not None else None
 
         return await self._db.run(work)
 

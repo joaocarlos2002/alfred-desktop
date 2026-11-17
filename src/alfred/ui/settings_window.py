@@ -312,6 +312,12 @@ class MemorySection(QWidget):
         forget = QPushButton("Esquecer tudo")
         forget.setProperty("role", "danger")
         forget.clicked.connect(self._confirm_forget)
+        self.new_chat = QPushButton("Nova conversa")
+        self.new_chat.setToolTip(
+            "O ALFRED lembra das últimas trocas da conversa. Comece outra (ou diga "
+            '"Alfred, nova conversa").'
+        )
+        self.new_chat.clicked.connect(lambda: self._run(self._new_conversation()))
         self.feedback = QLabel()
         self.feedback.setProperty("role", "muted")
         row = QHBoxLayout()
@@ -319,6 +325,7 @@ class MemorySection(QWidget):
         row.addWidget(add)
         actions = QHBoxLayout()
         actions.addWidget(delete)
+        actions.addWidget(self.new_chat)
         actions.addStretch()
         actions.addWidget(forget)
         for widget in (intro, self.list):
@@ -386,6 +393,12 @@ class MemorySection(QWidget):
         )
         if answer == QMessageBox.StandardButton.Yes:
             self._run(self._forget_all())
+
+    async def _new_conversation(self) -> None:
+        service = self._service()
+        if service is not None:
+            await service.new_conversation()
+            self.feedback.setText("Nova conversa iniciada: as trocas anteriores não serão usadas.")
 
     async def _forget_all(self) -> None:
         service = self._service()

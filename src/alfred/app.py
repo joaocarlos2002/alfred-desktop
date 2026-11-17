@@ -324,7 +324,17 @@ def bootstrap(
     from alfred.infrastructure.db.memory_repository import SqlMemoryRepository
     from alfred.memory.service import MemoryService
 
-    memory = MemoryService(SqlMemoryRepository(database), bus)
+    memory = MemoryService(SqlMemoryRepository(database), bus, config=lambda: settings.current.ai)
+    from alfred.core.commands import CommandResult
+
+    async def new_conversation(_: Any) -> CommandResult:
+        await memory.new_conversation()
+        return CommandResult("Certo, vamos começar uma conversa nova.", tool="nova_conversa")
+
+    command_registry.register(
+        r"(?:alfred\s+)?(?:nova conversa|vamos mudar de assunto|esquece (?:essa|a) conversa)",
+        new_conversation,
+    )
     modules.append(memory)
     from alfred.core.scheduler import StepScheduler
 
@@ -335,6 +345,7 @@ def bootstrap(
         tasks,
         bus,
         context_provider=memory.context,
+        history_provider=memory.history,
         scheduler=StepScheduler(
             input_lock, max_parallel=lambda: settings.current.ai.max_parallel_steps
         ),
