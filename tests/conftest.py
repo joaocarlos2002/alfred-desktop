@@ -27,3 +27,19 @@ def shutdown_qt_at_session_end() -> Iterator[None]:
     from alfred.ui.qt_runtime import shutdown_qt
 
     shutdown_qt()
+
+
+@pytest.fixture(autouse=True)
+def full_motion() -> Iterator[None]:
+    """Testes não dependem do "Efeitos de animação" do Windows da máquina (a CI os desliga).
+
+    Os testes de movimento reduzido configuram a política explicitamente.
+    """
+    from alfred.ui.motion import MOTION
+
+    system, reduced = MOTION._system, MOTION.reduced
+    MOTION._system = lambda: False
+    MOTION.configure(animations_enabled=True)
+    yield
+    MOTION._system = system
+    MOTION.reduced = reduced
