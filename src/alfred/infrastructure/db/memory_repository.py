@@ -21,34 +21,68 @@ class MemoryItem:
     content: str
     source: str | None
     updated_at: datetime
+    confidence: float | None = None
+    conversation_id: str | None = None
+    replaces_id: int | None = None
+
+
+def _item(row: Memory) -> MemoryItem:
+    return MemoryItem(
+        row.id,
+        row.kind,
+        row.content,
+        row.source,
+        row.updated_at,
+        row.confidence,
+        row.conversation_id,
+        row.replaces_id,
+    )
 
 
 class SqlMemoryRepository:
     def __init__(self, database: Database) -> None:
         self._db = database
 
-    async def add(self, kind: str, content: str, source: str | None = None) -> MemoryItem:
+    async def add(
+        self,
+        kind: str,
+        content: str,
+        source: str | None = None,
+        *,
+        confidence: float | None = None,
+        conversation_id: str | None = None,
+        replaces_id: int | None = None,
+    ) -> MemoryItem:
         def work(session: Session) -> MemoryItem:
-            row = Memory(kind=kind, content=content, source=source)
+            row = Memory(
+                kind=kind,
+                content=content,
+                source=source,
+                confidence=confidence,
+                conversation_id=conversation_id,
+                replaces_id=replaces_id,
+            )
             session.add(row)
             session.flush()
-            return MemoryItem(row.id, row.kind, row.content, row.source, row.updated_at)
+            return _item(row)
 
         return await self._db.run(work)
 
     async def list(self) -> list[MemoryItem]:
         def work(session: Session) -> list[MemoryItem]:
             rows = session.scalars(select(Memory).order_by(Memory.updated_at.desc()))
-            return [MemoryItem(r.id, r.kind, r.content, r.source, r.updated_at) for r in rows]
+            return [_item(r) for r in rows]
 
         return await self._db.run(work)
 
-    async def update(self, memory_id: int, content: str) -> bool:
+    async def update(self, memory_id: int, content: str, kind: str | None = None) -> bool:
         def work(session: Session) -> bool:
             row = session.get(Memory, memory_id)
             if row is None:
                 return False
             row.content = content
+            if kind is not None:
+                row.kind = kind
             return True
 
         return await self._db.run(work)

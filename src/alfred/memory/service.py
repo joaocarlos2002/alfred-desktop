@@ -25,6 +25,8 @@ from alfred.infrastructure.db.memory_repository import MemoryItem
 logger = logging.getLogger(__name__)
 
 CONTEXT_CHAR_LIMIT = 2000
+SUGGESTION = "suggestion:"
+"""Prefixo do tipo das memórias aprendidas aguardando aprovação."""
 SUMMARY_ITEMS = 10
 """Pedidos antigos resumidos além da janela de trocas."""
 SUMMARY_CHARS = 120
@@ -32,11 +34,20 @@ SUMMARY_CHARS = 120
 
 
 class MemoryStore(Protocol):
-    async def add(self, kind: str, content: str, source: str | None = None) -> MemoryItem: ...
+    async def add(
+        self,
+        kind: str,
+        content: str,
+        source: str | None = None,
+        *,
+        confidence: float | None = None,
+        conversation_id: str | None = None,
+        replaces_id: int | None = None,
+    ) -> MemoryItem: ...
 
     async def list(self) -> list[MemoryItem]: ...
 
-    async def update(self, memory_id: int, content: str) -> bool: ...
+    async def update(self, memory_id: int, content: str, kind: str | None = None) -> bool: ...
 
     async def delete(self, memory_id: int) -> bool: ...
 
@@ -98,7 +109,52 @@ class MemoryService(Module):
         return await self._store.add(kind, content.strip(), source)
 
     async def memories(self) -> list[MemoryItem]:
-        return await self._store.list()
+        """Memórias confirmadas (sugestões pendentes ficam de fora)."""
+        return [m for m in await self._store.list() if not m.kind.startswith(SUGGESTION)]
+
+    # ------------------------------------------------------------------ aprendizado (#120)
+    async def suggestions(self) -> list[MemoryItem]:
+        return [m for m in await self._store.list() if m.kind.startswith(SUGGESTION)]
+
+    async def suggest(
+        self, kind: str, content: str, confidence: float, replaces_id: int | None = None
+    ) -> MemoryItem:
+        """Guarda algo aprendido para o usuário aprovar (não entra no contexto da IA)."""
+        return await self._store.add(
+            SUGGESTION + kind,
+            content,
+            "aprendido",
+            confidence=confidence,
+            conversation_id=self._conversation,
+            replaces_id=replaces_id,
+        )
+
+    async def learn(
+        self, kind: str, content: str, confidence: float, replaces_id: int | None = None
+    ) -> None:
+        """Modo automático: grava direto (substituindo a memória conflitante)."""
+        confirmed = {m.id for m in await self.memories()}
+        if replaces_id is not None and replaces_id in confirmed:
+            await self._store.update(replaces_id, content, kind)
+            return
+        await self._store.add(
+            kind,
+            content,
+            "aprendido",
+            confidence=confidence,
+            conversation_id=self._conversation,
+        )
+
+    async def approve(self, suggestion_id: int, content: str | None = None) -> None:
+        suggestion = next(s for s in await self.suggestions() if s.id == suggestion_id)
+        kind = suggestion.kind.removeprefix(SUGGESTION)
+        text = (content or suggestion.content).strip()
+        if suggestion.replaces_id is not None:
+            await self._store.delete(suggestion.replaces_id)  # consolidação: troca a antiga
+        await self._store.update(suggestion_id, text, kind)
+
+    async def discard(self, suggestion_id: int) -> None:
+        await self._store.delete(suggestion_id)
 
     async def edit(self, memory_id: int, content: str) -> bool:
         return await self._store.update(memory_id, content.strip())
@@ -117,7 +173,7 @@ class MemoryService(Module):
         """Bloco de contexto para a instrução de sistema da IA (vazio se não houver memórias)."""
         lines: list[str] = []
         used = 0
-        for item in await self._store.list():
+        for item in await self.memories():
             line = f"- {item.content}"
             if used + len(line) > CONTEXT_CHAR_LIMIT:
                 break
