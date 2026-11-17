@@ -6,11 +6,18 @@ quanto tempo o modelo fica carregado após o uso (Diretriz 3: nada pesado perman
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
+import os
+import shutil
+import subprocess
 import time
 import uuid
+from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     import httpx
@@ -27,6 +34,35 @@ from alfred.domain.ai import (
 )
 
 DEFAULT_URL = "http://127.0.0.1:11434"
+
+
+def find_executable() -> Path | None:
+    """``ollama.exe`` instalado (PATH ou instalação padrão por usuário)."""
+    found = shutil.which("ollama")
+    if found:
+        return Path(found)
+    local = os.environ.get("LOCALAPPDATA")
+    candidate = Path(local) / "Programs" / "Ollama" / "ollama.exe" if local else None
+    return candidate if candidate is not None and candidate.exists() else None
+
+
+def launch_hidden(command: list[str]) -> None:
+    """Inicia o servidor sem janela, desvinculado do ALFRED (continua se o ALFRED fechar)."""
+    flags = 0
+    if os.name == "nt":
+        flags = (
+            subprocess.CREATE_NO_WINDOW
+            | subprocess.DETACHED_PROCESS
+            | subprocess.CREATE_NEW_PROCESS_GROUP
+        )
+    subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=flags,
+        close_fds=True,
+    )
 
 
 def _to_ollama(message: ChatMessage) -> dict[str, Any]:
@@ -76,10 +112,17 @@ class OllamaProvider:
         *,
         keep_alive: str = "5m",
         transport: httpx.AsyncBaseTransport | None = None,
+        executable: Path | object | None = ...,
+        launcher: Callable[[list[str]], None] = launch_hidden,
+        poll_interval: float = 0.5,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.keep_alive = keep_alive
         self._transport = transport
+        self._executable = find_executable() if executable is ... else executable
+        self._launcher = launcher
+        self._poll_interval = poll_interval
+        self._starting = asyncio.Lock()
 
     def _client(self, timeout: float) -> httpx.AsyncClient:
         import httpx  # sob demanda: ~0,2 s a menos na inicialização (#47)
@@ -109,6 +152,40 @@ class OllamaProvider:
     async def list_models(self) -> list[str]:
         data = await self._request("GET", "/api/tags", 10)
         return [model["name"] for model in data.get("models", [])]
+
+    @property
+    def is_loopback(self) -> bool:
+        host = urlparse(self.base_url).hostname or ""
+        return host in ("127.0.0.1", "localhost", "::1")
+
+    async def _alive(self) -> bool:
+        try:
+            await self._request("GET", "/api/version", 3)
+        except ProviderError:
+            return False
+        return True
+
+    async def ensure_running(self, *, timeout: float = 30.0) -> bool:
+        """Garante o servidor local no ar, iniciando o Ollama instalado se estiver parado.
+
+        A instalação silenciosa não cria o atalho de inicialização do Ollama: sem isto, depois
+        de reiniciar o computador o ALFRED ficava sem IA. Nunca inicia nada para um servidor
+        remoto nem quando o Ollama não está instalado."""
+        if await self._alive():
+            return True
+        if not self.is_loopback or not isinstance(self._executable, Path):
+            return False
+        async with self._starting:
+            if await self._alive():
+                return True
+            await asyncio.to_thread(self._launcher, [str(self._executable), "serve"])
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + timeout
+            while loop.time() < deadline:
+                if await self._alive():
+                    return True
+                await asyncio.sleep(self._poll_interval)
+        return False
 
     async def is_loaded(self, model: str) -> bool:
         """O modelo já está na memória (GPU/CPU)? Carregar um modelo de ~5 GB leva de

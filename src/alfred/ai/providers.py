@@ -66,10 +66,13 @@ class AIService(Module):
         self.total_output_tokens = 0
 
     async def start(self) -> None:
-        return None
+        # Sobe o servidor local em segundo plano: o primeiro pedido não espera por isso.
+        self._boot = asyncio.ensure_future(self._ensure_local_server())
 
     async def stop(self) -> None:
-        return None
+        boot = getattr(self, "_boot", None)
+        if boot is not None and not boot.done():
+            boot.cancel()
 
     async def health(self) -> Health:
         ai = self.config
@@ -86,7 +89,13 @@ class AIService(Module):
     ) -> ChatResponse:
         ai = self.config
         provider = self.registry.get(ai.provider)
-        model = ai.model or await self._default_model(provider)
+        try:
+            model = ai.model or await self._default_model(provider)
+        except ProviderUnavailableError:
+            # Ollama instalado mas parado (ex.: após reiniciar o PC): inicia e tenta de novo.
+            if not await self._ensure_local_server():
+                raise
+            model = ai.model or await self._default_model(provider)
         timeout = ai.timeout_seconds
         if await self._needs_loading(provider, model):
             # Sem isso, o primeiro pedido estourava o limite enquanto o modelo ainda carregava
@@ -127,6 +136,22 @@ class AIService(Module):
             delay = self._backoff * 2 ** (attempt - 1)
             logger.warning("IA falhou (%s); nova tentativa %d em %.1f s", error, attempt, delay)
             await asyncio.sleep(delay)
+
+    async def _ensure_local_server(self) -> bool:
+        ai = self.config
+        if not ai.start_local_server:
+            return False
+        try:
+            provider = self.registry.get(ai.provider)
+        except ProviderError:
+            return False
+        ensure = getattr(provider, "ensure_running", None)
+        if ensure is None or not getattr(provider, "local", False):
+            return False
+        started: bool = await ensure()
+        if started:
+            logger.info("Servidor de IA local (%s) disponível", provider.name)
+        return started
 
     @staticmethod
     async def _needs_loading(provider: LLMProvider, model: str) -> bool:
