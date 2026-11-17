@@ -78,6 +78,19 @@ class SkillManager(Module):
             return Health(status=HealthStatus.DEGRADED, detail=f"skills com falha: {names}")
         return Health(status=HealthStatus.HEALTHY, detail=f"{len(self._active)} skill(s) ativa(s)")
 
+    async def context(self) -> str:
+        """Contexto das skills ativas para o orquestrador (falhas não derrubam o pedido)."""
+        parts: list[str] = []
+        for key in list(self._active):
+            try:
+                text = await self._skills[key].context()
+            except Exception:
+                logger.exception("Contexto da skill '%s' indisponível", key)
+                continue
+            if text:
+                parts.append(text)
+        return "\n\n".join(parts)
+
     # ------------------------------------------------------------------ estado
     def statuses(self) -> list[SkillStatus]:
         enabled = set(self._settings.current.skills.enabled)
