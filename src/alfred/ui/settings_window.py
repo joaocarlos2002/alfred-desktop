@@ -56,7 +56,7 @@ SECTIONS: list[tuple[str, str, str | None]] = [
     ("voice", "Voz", None),
     ("activation", "Ativação", None),
     ("ai", "Inteligência artificial", None),
-    ("applications", "Aplicações", "Fase 4 — Automação"),
+    ("applications", "Aplicações", None),
     ("cursor", "Cursor virtual", None),
     ("triggers", "Gatilhos", None),
     ("skills", "Skills", None),
@@ -618,6 +618,99 @@ def _first_error(exc: Exception) -> str:
     return str(exc)
 
 
+class ApplicationsSection(QWidget):
+    """O que o ALFRED aprendeu sobre cada programa (skill "Aprender os programas", #125)."""
+
+    def __init__(self, skills: Callable[[], Any] | None) -> None:
+        super().__init__()
+        self._skills = skills
+        self._pending: set[asyncio.Task[None]] = set()
+        self._programs: list[Any] = []
+        layout = QVBoxLayout(self)
+        intro = QLabel(
+            "Programas que o ALFRED já explorou (somente leitura) e procedimentos que você "
+            'ensinou. Peça "Alfred, aprenda o Word" com o programa aberto para começar.'
+        )
+        intro.setWordWrap(True)
+        intro.setProperty("role", "muted")
+        self.list = QListWidget()
+        self.list.currentRowChanged.connect(self._show)
+        self.details = QPlainTextEdit()
+        self.details.setReadOnly(True)
+        self.details.setMaximumHeight(160)
+        forget = QPushButton("Esquecer programa")
+        forget.setProperty("role", "danger")
+        forget.clicked.connect(lambda: self._run(self._forget()))
+        self.feedback = QLabel()
+        self.feedback.setProperty("role", "muted")
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(forget)
+        for widget in (intro, self.list, self.details):
+            layout.addWidget(widget)
+        layout.addLayout(row)
+        layout.addWidget(self.feedback)
+        self._run(self.reload())
+
+    def _skill(self) -> Any:
+        manager = self._skills() if self._skills is not None else None
+        if manager is None:
+            return None
+        try:
+            return manager.get("programas")
+        except KeyError:
+            return None
+
+    def _run(self, coro: Any) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            coro.close()
+            return
+        task = loop.create_task(coro)
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def reload(self) -> None:
+        skill = self._skill()
+        if skill is None:
+            self.feedback.setText('A skill "Aprender os programas" não está disponível.')
+            return
+        self._programs = await skill.programs()
+        self.list.clear()
+        for knowledge in self._programs:
+            self.list.addItem(f"{knowledge.title or knowledge.app_key}  ({knowledge.app_key})")
+        self.details.clear()
+        self.feedback.setText(
+            "Nenhum programa aprendido ainda."
+            if not self._programs
+            else f"{len(self._programs)} programa(s) aprendido(s)."
+        )
+
+    def _show(self, row: int) -> None:
+        if not 0 <= row < len(self._programs):
+            self.details.clear()
+            return
+        k = self._programs[row]
+        lines = [
+            f"Elementos conhecidos: {len(k.elements)}",
+            "Atalhos: " + (", ".join(k.shortcuts) or "nenhum"),
+            "Procedimentos:",
+        ]
+        lines += [f"  • {name}: {steps}" for name, steps in sorted(k.procedures.items())] or [
+            "  (nenhum)"
+        ]
+        self.details.setPlainText("\n".join(lines))
+
+    async def _forget(self) -> None:
+        skill = self._skill()
+        row = self.list.currentRow()
+        if skill is None or not 0 <= row < len(self._programs):
+            return
+        await skill.forget(self._programs[row].app_key)
+        await self.reload()
+
+
 class SkillsSection(QWidget):
     """Liga e desliga skills (#123); mostra se cada uma está ativa ou com problema."""
 
@@ -771,6 +864,8 @@ class SettingsWindow(QWidget):
                 page = TriggersSection(triggers)
             elif key == "skills":
                 page = SkillsSection(skills)
+            elif key == "applications":
+                page = ApplicationsSection(skills)
             elif key == "privacy":
                 form = SectionForm(key, settings.current, choices)
                 self.forms[key] = form

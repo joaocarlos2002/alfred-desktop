@@ -131,6 +131,20 @@ class Application(TimestampMixin, Base):
     aliases: Mapped[list[str]] = mapped_column(default=list)
 
 
+class AppKnowledge(TimestampMixin, Base):
+    """O que o ALFRED aprendeu sobre um programa (#125): mapa da interface e procedimentos."""
+
+    __tablename__ = "app_knowledge"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    app_key: Mapped[str] = mapped_column(String(200), unique=True)
+    title: Mapped[str | None] = mapped_column(String(300))
+    elements: Mapped[JsonDict] = mapped_column(default=dict)
+    shortcuts: Mapped[list[str]] = mapped_column(default=list)
+    procedures: Mapped[JsonDict] = mapped_column(default=dict)
+    explored_at: Mapped[datetime | None]
+
+
 class Trigger(TimestampMixin, Base):
     __tablename__ = "triggers"
 

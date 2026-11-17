@@ -139,7 +139,7 @@ class LoggingSettings(Section):
 
 
 class SkillsSettings(Section):
-    enabled: tuple[str, ...] = ("ditado",)
+    enabled: tuple[str, ...] = ("ditado", "programas")
     """Skills habilitadas (gerenciadas na seção Skills das configurações)."""
 
 

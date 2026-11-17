@@ -318,6 +318,9 @@ def bootstrap(
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
     dictation_backends: tuple[Any, Any] | None = None
+    app_knowledge_backends: tuple[Any, Any] | None = None
+    if app_lister is not None:
+        app_knowledge_backends = (windows, uia)
     if audio_backend is not None and app_lister is not None:
         dictation_backends = (app_voice_pipeline, keyboard)
     hotkey_service: HotkeyService | None = None
@@ -343,13 +346,20 @@ def bootstrap(
     modules.append(memory)
     from alfred.core.scheduler import StepScheduler
 
+    async def combined_context() -> str:
+        # Memórias do usuário + o que as skills ativas sabem (ex.: programas aprendidos).
+        parts = [await memory.context()]
+        if app.skills is not None:
+            parts.append(await app.skills.context())
+        return "\n\n".join(p for p in parts if p)
+
     orchestrator = Orchestrator(
         ai,
         tool_registry,
         permissions,
         tasks,
         bus,
-        context_provider=memory.context,
+        context_provider=combined_context,
         history_provider=memory.history,
         scheduler=StepScheduler(
             input_lock, max_parallel=lambda: settings.current.ai.max_parallel_steps
@@ -378,6 +388,14 @@ def bootstrap(
     skill_manager = SkillManager(settings, tool_registry, command_registry)
     for skill in skills:
         skill_manager.register(skill)
+    if app_knowledge_backends is not None:
+        from alfred.infrastructure.db.app_knowledge_repository import SqlAppKnowledgeRepository
+        from alfred.skills.app_knowledge import AppKnowledgeSkill
+
+        windows_service, uia_service = app_knowledge_backends
+        skill_manager.register(
+            AppKnowledgeSkill(SqlAppKnowledgeRepository(database), windows_service, uia_service)
+        )
     if dictation_backends is not None:
         from alfred.skills.dictation import START_GRACE_SECONDS, DictationSkill
 

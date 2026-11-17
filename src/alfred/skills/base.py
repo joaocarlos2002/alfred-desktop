@@ -27,6 +27,10 @@ class Skill:
         """Frases de voz (regex sobre o texto normalizado) atendidas diretamente."""
         return []
 
+    async def context(self) -> str:
+        """Texto extra para a instrução da IA enquanto a skill estiver ativa (opcional)."""
+        return ""
+
     async def activate(self) -> None:
         """Prepara recursos. Uma exceção aqui desativa só esta skill."""
         return None
