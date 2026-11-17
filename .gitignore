@@ -24,3 +24,4 @@ data/**
 # IDE / SO
 .idea/
 Thumbs.db
+packaging/alfred.ico

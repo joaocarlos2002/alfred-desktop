@@ -37,6 +37,15 @@ NETWORK_FLOWS: tuple[NetworkFlow, ...] = (
         "não sai do computador",
     ),
     NetworkFlow(
+        "self_check",
+        "alfred/diagnostics.py",
+        "Autodiagnóstico (alfred --self-check)",
+        "127.0.0.1:11434 — este computador",
+        "nada: só lista os modelos instalados no Ollama local",
+        False,
+        "só quando você roda o diagnóstico",
+    ),
+    NetworkFlow(
         "external_ai",
         "alfred/ai/openai_compat.py",
         "IA externa (compatível com OpenAI)",

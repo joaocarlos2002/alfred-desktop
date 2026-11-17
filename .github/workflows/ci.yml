@@ -40,6 +40,34 @@ jobs:
       - name: Pytest
         run: uv run pytest --cov --cov-report=term-missing -m "not windows"
 
+  build:
+    # Executável distribuível (issue #48): PyInstaller + teste de fumaça + --self-check.
+    runs-on: windows-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --group build
+
+      - name: Build (PyInstaller) e testes de fumaça
+        run: uv run python scripts/build.py
+
+      - name: Publicar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALFRED-win64
+          path: dist/ALFRED-*-win64.zip
+          if-no-files-found: error
+          retention-days: 30
+
   security:
     # Cadeia de suprimentos e segredos (docs/security/threat-model.md, T8/T10).
     runs-on: ubuntu-latest
