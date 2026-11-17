@@ -52,7 +52,55 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="grava o resultado do --self-check neste arquivo JSON",
     )
+    parser.add_argument(
+        "--set",
+        action="append",
+        metavar="SECAO.CAMPO=VALOR",
+        default=[],
+        help="altera uma configuração (validada) e sai; ex.: general.start_with_windows=true",
+    )
+    parser.add_argument(
+        "--setup-ai",
+        action="store_true",
+        help="instala a IA local (Ollama verificado + modelo) com uma janela de progresso",
+    )
     return parser
+
+
+def apply_settings(assignments: Sequence[str]) -> int:
+    """``--set``: valida tudo antes de gravar; nada muda se qualquer item for inválido."""
+    import json
+
+    from pydantic import ValidationError
+
+    from alfred.config.store import SETTINGS_FILE, SettingsStore
+
+    store = SettingsStore(data_dir() / SETTINGS_FILE)
+    settings = store.load().settings
+    try:
+        for assignment in assignments:
+            key, sep, raw = assignment.partition("=")
+            section, dot, field = key.strip().partition(".")
+            if not sep or not dot:
+                raise ValueError(f"use SECAO.CAMPO=VALOR (recebido: {assignment!r})")
+            try:
+                value = json.loads(raw)
+            except json.JSONDecodeError:
+                value = raw  # texto simples
+            settings = settings.with_section(section, **{field: value})
+    except (KeyError, ValueError, ValidationError) as exc:
+        if sys.stderr is not None:
+            print(f"Configuração inválida: {exc}", file=sys.stderr)
+        return 2
+    store.save(settings)
+    return 0
+
+
+def setup_ai() -> int:
+    """``--setup-ai``: instala Ollama + modelo com janela de progresso (usado pelo instalador)."""
+    from alfred.ui.ai_setup_window import run_setup_window
+
+    return run_setup_window()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -61,6 +109,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from alfred.diagnostics import main as self_check
 
         return self_check(args.self_check_output)
+    if args.set:
+        return apply_settings(args.set)
+    if args.setup_ai:
+        return setup_ai()
 
     custom = data_dir() if os.environ.get(DATA_DIR_ENV) else None
     with SingleInstance(instance_name(custom)) as instance:

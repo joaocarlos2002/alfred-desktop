@@ -18,6 +18,33 @@ O script:
 
 A CI faz o mesmo em todo push e PR (job `build`) e publica o zip como artefato `ALFRED-win64`.
 
+## Instalador
+
+```powershell
+uv run python scripts/build_installer.py   # requer Inno Setup 6 (winget install JRSoftware.InnoSetup)
+```
+
+O resultado é `dist/ALFRED-Setup-<versão>.exe` ([`packaging/installer.iss`](../packaging/installer.iss)):
+
+- Instala por usuário, **sem administrador**, em `%LOCALAPPDATA%\Programs\ALFRED`.
+- Tarefas:
+  - atalho na área de trabalho;
+  - **iniciar com o Windows** (grava a configuração `general.start_with_windows` via `alfred --set`);
+  - **IA local** (marcada por padrão): `alfred --setup-ai` abre uma janela com progresso, instala o Ollama
+    (instalador oficial, executado **só com assinatura Authenticode válida da Ollama**) e baixa o
+    modelo adequado ao hardware (`qwen2.5:7b` com GPU de 6 GB+ ou 16 GB+ de RAM; senão `qwen2.5:3b`).
+- **Atualizar**: instalar por cima fecha o ALFRED em execução (Restart Manager) e preserva os dados.
+- **Desinstalar**:
+  - remove o programa e a inicialização automática;
+  - pergunta se apaga os dados (`%LOCALAPPDATA%\ALFRED`). Em modo silencioso, só apaga com `/REMOVEDATA`;
+  - o Ollama é um produto separado e permanece instalado.
+- **Assinatura de código**: o instalador do ALFRED ainda não é assinado. Não há certificado disponível,
+  então o Windows SmartScreen pode avisar na primeira execução.
+
+A CI (job `build`) compila o instalador e roda [`scripts/test_installer.ps1`](../scripts/test_installer.ps1)
+numa VM Windows limpa: instalar, conferir arquivos e configuração, `--self-check` no executável
+instalado, atualizar por cima, desinstalar mantendo os dados, e reinstalar e desinstalar com `/REMOVEDATA`.
+
 ## Escolhas
 
 - **Modo pasta (`onedir`), não `onefile`.** O `onefile` extrai ~550 MB para `%TEMP%` a cada

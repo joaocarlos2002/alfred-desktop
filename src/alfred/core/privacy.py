@@ -37,6 +37,15 @@ NETWORK_FLOWS: tuple[NetworkFlow, ...] = (
         "não sai do computador",
     ),
     NetworkFlow(
+        "ai_setup",
+        "alfred/ai/setup.py",
+        "Instalação da IA local (alfred --setup-ai)",
+        "ollama.com (instalador); modelos pelo servidor Ollama local",
+        "nada seu: download público; o instalador só roda com assinatura válida da Ollama",
+        True,
+        "só na instalação ou quando você pede para instalar a IA local",
+    ),
+    NetworkFlow(
         "self_check",
         "alfred/diagnostics.py",
         "Autodiagnóstico (alfred --self-check)",
