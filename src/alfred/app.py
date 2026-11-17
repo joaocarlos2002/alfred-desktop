@@ -452,6 +452,16 @@ def bootstrap(
         bus.subscribe(ScreenCaptured, flash_capture, name="capture-flash")
         app.virtual_cursor = VirtualCursorModule(overlay=overlay, settings=settings, bus=bus)
         app.manager.register(app.virtual_cursor)
+        from alfred.ui.motion import MOTION
+
+        # Movimento reduzido: opção "Animações" + preferência do Windows (#111).
+        MOTION.configure(animations_enabled=settings.current.appearance.animations)
+
+        async def motion_settings(event: SettingsChanged) -> None:
+            if event.section == "appearance":
+                MOTION.configure(animations_enabled=event.settings.appearance.animations)
+
+        bus.subscribe(SettingsChanged, motion_settings, name="ui-motion")
         settings_window = SettingsWindowModule(
             bus=bus,
             settings=settings,

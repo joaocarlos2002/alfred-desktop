@@ -189,7 +189,7 @@ class HighlightLayer:
         self._overlay = overlay
         self._items: dict[UUID, _Highlight] = {}
         self._timer = QTimer(overlay)
-        self._timer.setInterval(100)
+        self._timer.setInterval(THEME.motion.poll_ms)
         self._timer.timeout.connect(self._expire)
 
     @property

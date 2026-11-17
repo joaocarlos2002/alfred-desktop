@@ -1,57 +1,114 @@
-# Design system
+# Design system v2
 
-Identidade própria do ALFRED: discrição, precisão, inteligência e controle. A inspiração é a
-sofisticação de um sistema de inteligência pessoal premium — **sem** reproduzir personagens,
-logotipos ou elementos protegidos de terceiros. Todos os assets são desenhados em código.
+A identidade do ALFRED transmite elegância, inteligência e discrição: preto profundo, grafite e
+carvão em camadas, prata e branco suave no texto e **um único acento**, um dourado discreto.
+A profundidade vem de superfícies sobrepostas, bordas sutis e brilho controlado, nunca de
+gradientes chamativos. O mascote é a ilustração oficial do Alfred, preservada sem alterações.
+Não reproduzimos personagens, logotipos ou elementos protegidos de terceiros.
 
-Fonte única: [`src/alfred/ui/theme.py`](../src/alfred/ui/theme.py). Componentes não definem
-cores próprias; um teste falha se aparecer uma cor hexadecimal fora do tema.
+Fontes únicas:
+- [`ui/theme.py`](../src/alfred/ui/theme.py): tokens e stylesheet;
+- [`ui/motion.py`](../src/alfred/ui/motion.py): movimento;
+- [`ui/components.py`](../src/alfred/ui/components.py): componentes.
+
+O teste `tests/test_design_system.py` falha se algum módulo de UI usar cor, duração, intervalo
+ou curva de easing literal, ou se um par texto/fundo ficar abaixo do contraste WCAG AA.
 
 ## Cores
 
+### Paleta da identidade
+
+| Token | Valor | Papel |
+| ----- | ----- | ----- |
+| `void` (= `obsidian`) | `#08090B` | Preto profundo: fundo principal |
+| `graphite` | `#151519` | Superfícies elevadas: painéis, widget, cartões |
+| `charcoal` (= `slate`) | `#242429` | Bordas, divisores, campos |
+| `silver` (= `text_secondary`) | `#BFC1C6` | Texto secundário, ícones |
+| `ivory` (= `text`) | `#F2F0EC` | Texto principal |
+| `gold` (= `accent`) | `#B69A78` | O único acento: foco, seleção, identidade |
+
+### Papéis derivados
+
 | Token | Valor | Uso |
 | ----- | ----- | --- |
-| `obsidian` | `#0B0D10` | Fundo principal |
-| `graphite` | `#14171C` | Superfícies elevadas (painéis, widget) |
-| `slate` | `#1F242B` | Bordas, divisores, campos |
-| `steel` | `#2C333C` | Hover e estados ativos |
-| `text` / `text_muted` | `#E6E8EB` / `#8B939E` | Texto principal e secundário |
-| `accent` / `accent_soft` | `#C9A227` / `#3A3220` | Foco, seleção e identidade |
+| `surface_2` | `#1B1B20` | Cartão dentro de painel (segunda camada) |
+| `steel` | `#2F2F36` | Hover e estados ativos |
+| `border_soft` | `#1E1E23` | Borda quase invisível entre camadas |
+| `text_muted` | `#8C8E95` | Legendas e dicas (5,5:1 sobre grafite) |
+| `accent_strong` | `#CDB291` | Hover do acento, texto sobre `accent_soft` |
+| `accent_soft` | `#2A241D` | Fundo tingido de dourado (seleção, botão primário) |
 
 ### Estados do assistente
 
-| Estado | Token | Animação |
-| ------ | ----- | -------- |
-| Inativo | `steel` | nenhuma (zero custo de CPU) |
-| Ouvindo | `listening` `#4FA3FF` | pulso suave |
-| Processando | `processing` `#C9A227` | arco girando |
-| Executando | `executing` `#7C5CFF` | arco girando |
-| Aguardando confirmação | `confirm` `#F2A541` | pulso |
-| Concluído | `success` `#3FB97A` | estático, volta a inativo |
-| Erro | `error` `#E5484D` | estático, volta a inativo |
+Cores contidas, ainda distinguíveis entre si e com contraste mínimo de 3:1 para indicadores gráficos:
+
+| Estado | Token | Valor |
+| ------ | ----- | ----- |
+| Ouvindo | `listening` | `#9FB4CC` (prata azulado) |
+| Processando | `processing` | `#B69A78` (dourado) |
+| Executando | `executing` | `#D7C3A0` (champanhe) |
+| Aguardando confirmação | `confirm` | `#D9A55B` (âmbar) |
+| Concluído | `success` | `#8DB596` (sálvia) |
+| Erro | `error` | `#D06A6A` |
 
 ## Tipografia
 
-Segoe UI Variable (fallback Segoe UI), corpo 10 pt, títulos 13 pt / 600.
+Família Segoe UI Variable, com *Display* para títulos e *Text* para o corpo.
 
-## Espaçamento e raios
+| Papel (`role` no QLabel) | Tamanho | Peso |
+| ------------------------ | ------- | ---- |
+| `display` | 20 pt | 600 |
+| `title` | 14 pt | 600 |
+| `subtitle` | 11,5 pt | 500 |
+| corpo | 10 pt | 400 |
+| `muted` / `secondary` | 10 pt | 400 (`text_muted` / `silver`) |
+| `overline` | 8 pt, caixa alta, espaçamento de 1,2 pt | 600, dourado |
 
-Escala de 4 px (`xs` 4, `sm` 8, `md` 12, `lg` 16, `xl` 24). Raios `sm` 6, `md` 10, `lg` 16.
+## Espaçamento, raios e elevação
+
+- **Espaçamento** (grade de 4 px): `xxs 2` · `xs 4` · `sm 8` · `md 12` · `lg 16` · `xl 24` · `xxl 32` · `xxxl 48`.
+- **Raios**: `sm 6` · `md 10` (botões, campos) · `lg 14` (cartões, listas) · `xl 20` · `pill 11`. No QSS,
+  um raio maior que metade da altura faz o Qt ignorar os cantos; por isso a pílula tem valor fixo.
+- **Elevação**: `low` (blur 12, deslocamento 2), `medium` (24, 6), `high` (40, 12), sombras pretas
+  translúcidas. O brilho dourado de foco usa `glow_alpha = 70`.
 
 ## Movimento
 
-- Animações são **sutis e funcionais**: indicam um estado real, nunca decoram.
-- Durações: `fast` 120 ms, `normal` 220 ms, `slow` 400 ms; ciclo de estado 1400 ms.
-- Alvo de 60 FPS; nenhum timer roda quando o assistente está inativo.
+| Token | ms | Uso |
+| ----- | -- | --- |
+| `instant` | 90 | Respostas imediatas a toque |
+| `fast` | 140 | Toggles, hover, saídas |
+| `normal` | 220 | Entradas de componentes, transições de tela |
+| `slow` | 360 | Expansões maiores |
+| `emphasis` | 480 | Momentos de destaque (com `emphasis`/OutBack) |
+| `pulse` | 1400 | Ciclo dos estados vivos (ouvindo, processando) |
 
-## Ícone
+Curvas nomeadas: `standard` (OutCubic), `enter` (OutQuint), `exit` (InCubic),
+`emphasis` (OutBack), `pulse` (InOutSine), `linear`.
 
-Monograma geométrico "A" em `accent` sobre círculo `obsidian`/`slate`, gerado em
-[`ui/icon.py`](../src/alfred/ui/icon.py) em todos os tamanhos.
+**Movimento reduzido.** `MOTION.reduced` é verdadeiro quando o usuário desliga *Aparência ›
+Animações* **ou** quando o Windows está com os efeitos de animação desligados
+(`SPI_GETCLIENTAREAANIMATION`). Nesse caso, `MOTION.animate(...)` aplica o valor final na hora:
+a informação aparece, só não se move. O widget, o cursor virtual, os toggles e os indicadores
+de estado respeitam essa política.
 
-## Ilustração
+## Componentes
 
-O mordomo ilustrado (`docs/images/Mordomo Elegante com Cloche e Tablet.png`) é usado como
-avatar circular nos cabeçalhos dos painéis e no estado vazio do painel de atividades. Os assets
-otimizados em `src/alfred/ui/assets/` são gerados por `uv run python scripts/build_assets.py`.
-Ícones pequenos (bandeja e widget, 16–56 px) usam o monograma, mais legível nesses tamanhos.
+| Componente | Onde | Notas |
+| ---------- | ---- | ----- |
+| Botões `primary`, padrão, `ghost`, `danger` | QSS (`role`) | Hover e pressionado com transição de cor |
+| Campos, selects, listas, abas, menus, tooltip, barra de progresso | QSS | Foco dourado; hover sutil |
+| `Card(level=1/2)` | `components.py` | Superfície em camadas com borda sutil |
+| `Chip(tone=...)` | `components.py` | `neutral`, `accent`, `success`, `error` |
+| `SectionHeader` | `components.py` | Sobrelinha + título + subtítulo |
+| `EmptyState` | `components.py` | Orientação + mascote opcional + ação |
+| `Toggle` | `components.py` | Interruptor animado, acessível por teclado |
+| `StatusDot` | `components.py` | Ponto com pulso suave (estático com movimento reduzido) |
+| `Toast` | `components.py` | Entra deslizando, some sozinho |
+| `Divider`, `apply_shadow`, `fade_in` | `components.py` | Utilitários |
+
+## Mascote
+
+A ilustração oficial (`docs/images/Mordomo Elegante com Cloche e Tablet.png`) gera os assets
+de `src/alfred/ui/assets` por `scripts/build_assets.py`, só com recorte e escala. A presença é
+intencional (boas-vindas, espera, voz, avisos importantes e estados vazios), não em todas as telas.
