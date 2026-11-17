@@ -140,6 +140,17 @@ class LoggingSettings(Section):
     backup_count: int = Field(default=5, ge=0, le=50)
 
 
+class ProfileSettings(Section):
+    response_length: Literal["auto", "short", "detailed"] = "auto"
+    """Tamanho das respostas (também ajustável falando "respostas mais curtas")."""
+    tone: Literal["auto", "formal", "casual"] = "auto"
+    """Tom das respostas."""
+    address: str | None = None
+    """Como o ALFRED chama você (ex.: senhor, João). Vazio: sem tratamento especial."""
+    use_habits: bool = True
+    """Usar os aplicativos que você abre com frequência para planejar melhor."""
+
+
 class SkillsSettings(Section):
     enabled: tuple[str, ...] = ("ditado", "programas")
     """Skills habilitadas (gerenciadas na seção Skills das configurações)."""
@@ -165,6 +176,7 @@ class Settings(BaseModel):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     privacy: PrivacySettings = Field(default_factory=PrivacySettings)
     skills: SkillsSettings = Field(default_factory=SkillsSettings)
+    profile: ProfileSettings = Field(default_factory=ProfileSettings)
 
     @classmethod
     def section_names(cls) -> tuple[str, ...]:

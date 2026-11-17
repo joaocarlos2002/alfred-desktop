@@ -31,7 +31,7 @@ def test_every_rf013_section_is_listed(qt_app: QApplication, tmp_path: Path) -> 
     titles = [i.text() for i in items if i.data(Qt.ItemDataRole.UserRole) is not None]
     groups = [i.text() for i in items if i.data(Qt.ItemDataRole.UserRole) is None]
 
-    assert len(titles) == len(SECTIONS) == 14
+    assert len(titles) == len(SECTIONS) == 15
     assert groups == ["ESSENCIAL", "VOZ", "INTELIGÊNCIA", "AUTOMAÇÃO", "PRIVACIDADE E DADOS"]
     for _, title, phase in SECTIONS:
         assert any(t.startswith(title) for t in titles)

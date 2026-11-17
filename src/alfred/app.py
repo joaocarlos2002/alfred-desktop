@@ -348,10 +348,15 @@ def bootstrap(
 
     modules.append(ConversationLearner(memory, ai, bus, config=lambda: settings.current.ai))
     from alfred.core.scheduler import StepScheduler
+    from alfred.memory.personalization import PersonalizationService
+
+    personalization = PersonalizationService(settings, bus, task_history, memory)
+    personalization.register_commands(command_registry)
+    modules.append(personalization)
 
     async def combined_context() -> str:
-        # Memórias do usuário + o que as skills ativas sabem (ex.: programas aprendidos).
-        parts = [await memory.context()]
+        # Perfil + memórias do usuário + o que as skills ativas sabem.
+        parts = [await personalization.context(), await memory.context()]
         if app.skills is not None:
             parts.append(await app.skills.context())
         return "\n\n".join(p for p in parts if p)
