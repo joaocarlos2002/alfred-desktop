@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -103,3 +104,57 @@ async def test_switching_provider_needs_no_orchestrator_change(tmp_path: Path) -
     assert (await service.chat(HELLO)).message.content == "de A"
     await service._settings.update("ai", provider="b")
     assert (await service.chat(HELLO)).message.content == "de B"
+
+
+async def test_cold_local_model_gets_load_time_and_is_announced(tmp_path: Path) -> None:
+    """Regressão: com o modelo descarregado o pedido estourava 60 s e recomeçava do zero."""
+    import asyncio
+
+    from alfred.domain.ai import ModelLoading
+    from alfred.domain.events import Event
+
+    class ColdProvider(FakeProvider):
+        def __init__(self) -> None:
+            super().__init__(replies=[ChatMessage(role="assistant", content="Pronto.")])
+            self.timeouts: list[float] = []
+            self.loaded = False
+
+        async def is_loaded(self, model: str) -> bool:
+            return self.loaded
+
+        async def chat(self, messages: Any, **kwargs: Any) -> Any:
+            self.timeouts.append(kwargs["timeout"])
+            return await super().chat(messages, **kwargs)
+
+    provider = ColdProvider()
+    service = await make(tmp_path, provider, timeout_seconds=60, load_timeout_seconds=180)
+    seen: list[Event] = []
+
+    async def keep(event: Event) -> None:
+        seen.append(event)
+
+    service._bus.subscribe(ModelLoading, keep)
+    await service._bus.start()
+    await service.chat(HELLO)
+    provider.loaded = True
+    provider._replies.append(ChatMessage(role="assistant", content="De novo."))
+    await service.chat(HELLO)
+    await service._bus.drain(timeout=1)
+    await service._bus.stop()
+    assert provider.timeouts == [240, 60]  # carga só quando precisa
+    assert [type(e) for e in seen] == [ModelLoading]
+    await asyncio.sleep(0)
+
+
+async def test_ollama_reports_whether_the_model_is_loaded() -> None:
+    import httpx
+
+    from alfred.ai.ollama import OllamaProvider
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/ps"
+        return httpx.Response(200, json={"models": [{"name": "qwen2.5:7b", "model": "qwen2.5:7b"}]})
+
+    provider = OllamaProvider(transport=httpx.MockTransport(handler))
+    assert await provider.is_loaded("qwen2.5:7b")
+    assert not await provider.is_loaded("llama3.2")

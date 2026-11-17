@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+import sys
+import threading
+import traceback
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -23,6 +26,7 @@ from alfred.domain.module import Health, HealthStatus, Module
 logger = logging.getLogger(__name__)
 
 DB_FILE = "alfred.db"
+SLOW_CLOSE_SECONDS = 2.0
 MIGRATIONS_DIR = Path(__file__).with_name("migrations")
 
 
@@ -57,6 +61,8 @@ class Database(Module):
         self._executor: ThreadPoolExecutor | None = None
         self._engine: Engine | None = None
         self._sessions: sessionmaker[Session] | None = None
+        self._current: str | None = None
+        self._thread_id: int | None = None
 
     # ------------------------------------------------------------------ ciclo de vida
     async def start(self) -> None:
@@ -66,8 +72,17 @@ class Database(Module):
     async def stop(self) -> None:
         if self._executor is None:
             return
-        await self._submit(self._close)
-        self._executor.shutdown(wait=True)
+        closing = asyncio.ensure_future(self._submit(self._close))
+        done, _ = await asyncio.wait({closing}, timeout=SLOW_CLOSE_SECONDS)
+        if not done:
+            # Diagnóstico: o encerramento chegou a passar do limite em uso real sem reproduzir.
+            logger.warning(
+                "Banco demorando para fechar; a thread está em %s:\n%s",
+                self._current or "(fila)",
+                self._thread_stack(),
+            )
+        await closing
+        self._executor.shutdown(wait=False)  # o close já terminou; não bloqueia o event loop
         self._executor = None
 
     async def health(self) -> Health:
@@ -100,7 +115,20 @@ class Database(Module):
     async def _submit[T](self, fn: Callable[[], T]) -> T:
         if self._executor is None:
             raise RuntimeError("Banco de dados não iniciado")
-        return await asyncio.get_running_loop().run_in_executor(self._executor, fn)
+
+        def tracked() -> T:
+            self._current = getattr(fn, "__qualname__", repr(fn))
+            self._thread_id = threading.get_ident()
+            try:
+                return fn()
+            finally:
+                self._current = None
+
+        return await asyncio.get_running_loop().run_in_executor(self._executor, tracked)
+
+    def _thread_stack(self) -> str:
+        frame = sys._current_frames().get(self._thread_id or -1)
+        return "".join(traceback.format_stack(frame)[-8:]) if frame is not None else "(sem pilha)"
 
     def _open(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

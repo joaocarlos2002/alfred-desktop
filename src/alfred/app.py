@@ -208,6 +208,17 @@ def bootstrap(
 
     bus.subscribe(ListeningStarted, warm_ai, name="ai-warm-up")
 
+    from alfred.domain.ai import ModelLoading
+    from alfred.domain.voice import SpeakRequested
+
+    async def announce_loading(event: ModelLoading) -> None:
+        # Silêncio de vários segundos parece travamento: avisa o que está acontecendo.
+        await bus.publish(
+            SpeakRequested(text="Só um instante, estou carregando a inteligência artificial.")
+        )
+
+    bus.subscribe(ModelLoading, announce_loading, name="ai-loading-notice")
+
     modules: list[Module] = [
         ai,
         settings,

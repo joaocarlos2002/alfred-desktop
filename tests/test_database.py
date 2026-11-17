@@ -195,3 +195,46 @@ async def test_activity_repository_roundtrip_and_deletion(db: Database) -> None:
 async def test_run_requires_started_database(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="não iniciado"):
         await Database(tmp_path / "x.db").run(lambda s: None)
+
+
+async def test_slow_close_is_diagnosed_and_does_not_block_the_loop(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regressão: o encerramento do banco chegou a passar de 5 s em uso real."""
+    import asyncio
+    import threading
+    import time
+
+    from alfred.infrastructure.db import database as module
+
+    monkeypatch.setattr(module, "SLOW_CLOSE_SECONDS", 0.1)
+    db = Database(tmp_path / "alfred.db")
+    await db.start()
+    release = threading.Event()
+
+    def slow_write(session: Session) -> None:
+        release.wait(5)
+
+    pending = asyncio.ensure_future(db.run(slow_write))  # ocupa a thread do banco
+    await asyncio.sleep(0.05)
+    ticks = 0
+
+    async def ticker() -> None:
+        nonlocal ticks
+        while not release.is_set():
+            ticks += 1
+            await asyncio.sleep(0.02)
+
+    heartbeat = asyncio.ensure_future(ticker())
+    threading.Timer(0.4, release.set).start()
+    started = time.perf_counter()
+    with caplog.at_level("WARNING"):
+        await db.stop()
+    await pending
+    await heartbeat
+    assert time.perf_counter() - started < 3
+    assert ticks >= 5  # o event loop continuou rodando durante o encerramento
+    warning = next(
+        r.getMessage() for r in caplog.records if "demorando para fechar" in r.getMessage()
+    )
+    assert "slow_write" in warning  # diz qual operação segurou o banco

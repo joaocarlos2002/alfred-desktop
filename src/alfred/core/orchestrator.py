@@ -120,11 +120,11 @@ class Orchestrator(Module):
     async def run(self, request: str, *, origin: str = "voice", task_id: UUID | None = None) -> str:
         task_id = task_id or uuid4()
         await self._bus.publish(TaskStarted(task_id=task_id, title=request, origin=origin))
-        system = SYSTEM_PROMPT
+        system = f"{SYSTEM_PROMPT}\n\n{self._capabilities()}"
         if self.context_provider is not None:
             extra = await self.context_provider()
             if extra:
-                system = f"{SYSTEM_PROMPT}\n\n{extra}"
+                system = f"{system}\n\n{extra}"
         history = [
             ChatMessage(role="system", content=system),
             ChatMessage(role="user", content=request),
@@ -200,6 +200,20 @@ class Orchestrator(Module):
         self, task_id: UUID, batch: dict[int, ToolCall], step: Step
     ) -> dict[str, Any]:
         return await self._run_step(task_id, step.key, batch[step.key])
+
+    def _capabilities(self) -> str:
+        """Lista real do que o ALFRED faz agora (sem isso o modelo inventava capacidades)."""
+        specs = self._tools.specs()
+        if not specs:
+            return (
+                "No momento você não tem ferramentas para agir no computador: só pode conversar. "
+                "Diga isso se perguntarem o que você sabe fazer."
+            )
+        lines = "\n".join(f"- {spec.description}" for spec in specs)
+        return (
+            "Se perguntarem o que você sabe fazer, resuma SOMENTE estas capacidades (não cite "
+            "agenda, arquivos, configurações do sistema nem nada fora da lista):\n" + lines
+        )
 
     def _escalation(self, task_id: UUID, tool: Tool, params: Any) -> str | None:
         """Motivo para exigir confirmação desta chamada, mesmo com a política "permitir"."""
