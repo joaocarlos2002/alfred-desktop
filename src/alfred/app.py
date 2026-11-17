@@ -344,6 +344,9 @@ def bootstrap(
         new_conversation,
     )
     modules.append(memory)
+    from alfred.memory.learning import ConversationLearner
+
+    modules.append(ConversationLearner(memory, ai, bus, config=lambda: settings.current.ai))
     from alfred.core.scheduler import StepScheduler
 
     async def combined_context() -> str:

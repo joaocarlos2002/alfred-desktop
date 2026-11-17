@@ -113,6 +113,8 @@ class AISettings(Section):
     """Modelo multimodal. Vazio: o primeiro com visão instalado no provedor."""
     max_parallel_steps: int = Field(default=4, ge=1, le=16)
     """Etapas independentes executadas ao mesmo tempo (rede, arquivos, leitura)."""
+    learning_mode: Literal["suggest", "auto", "off"] = "suggest"
+    """Aprender preferências e fatos das conversas: sugerir para aprovar, automático ou não."""
     conversation_turns: int = Field(default=8, ge=0, le=50)
     """Trocas recentes da conversa lembradas em cada pedido (0 desliga)."""
     conversation_idle_minutes: int = Field(default=30, ge=1, le=1440)

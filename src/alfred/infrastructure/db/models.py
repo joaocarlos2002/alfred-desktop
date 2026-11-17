@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -204,6 +205,11 @@ class Memory(TimestampMixin, Base):
     __tablename__ = "memories"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(30))  # fact | preference | note
+    kind: Mapped[str] = mapped_column(String(30))  # fact | preference | note | suggestion:*
     content: Mapped[str] = mapped_column(Text)
     source: Mapped[str | None] = mapped_column(String(100))
+    confidence: Mapped[float | None] = mapped_column(Float)
+    conversation_id: Mapped[str | None] = mapped_column(String(36))
+    """Conversa de onde a memória foi aprendida (#120)."""
+    replaces_id: Mapped[int | None]
+    """Memória que esta substitui ao ser aprovada (consolidação)."""

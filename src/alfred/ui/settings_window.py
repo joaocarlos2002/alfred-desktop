@@ -120,6 +120,15 @@ FIELD_LABELS = {
     "output_device": "Saída de áudio",
     "speed": "Velocidade (px/s)",
     "size": "Tamanho (px)",
+    "learning_mode": "Aprender com as conversas",
+    "conversation_turns": "Trocas lembradas da conversa",
+    "conversation_idle_minutes": "Nova conversa após (min)",
+    "conversation_char_budget": "Tamanho do contexto da conversa",
+    "vision_provider": "Provedor para análise de tela",
+    "vision_model": "Modelo multimodal",
+    "max_parallel_steps": "Etapas em paralelo",
+    "load_timeout_seconds": "Tempo extra para carregar o modelo (s)",
+    "start_local_server": "Iniciar o Ollama automaticamente",
 }
 CHOICE_LABELS = {
     "ask": "Perguntar",
@@ -132,6 +141,9 @@ CHOICE_LABELS = {
     "small": "Preciso (small)",
     "sapi": "Windows (SAPI)",
     "piper": "Neural local (Piper)",
+    "suggest": "Sugerir para eu aprovar",
+    "auto": "Automático",
+    "off": "Desligado",
 }
 HIDDEN_FIELDS = {"widget_position"}
 """Campos ajustados por interação direta (ex.: arrastar o widget), não por formulário."""
@@ -483,6 +495,25 @@ class MemorySection(QWidget):
         self.new_chat.clicked.connect(lambda: self._run(self._new_conversation()))
         self.feedback = QLabel()
         self.feedback.setProperty("role", "muted")
+        # Sugestões aprendidas das conversas (#120): aprovar (editando, se quiser) ou descartar.
+        self.suggestions_title = QLabel("SUGESTÕES DO ALFRED")
+        self.suggestions_title.setProperty("role", "overline")
+        self.suggestions = QListWidget()
+        self.suggestions.setMaximumHeight(140)
+        approve = QPushButton("Aprovar")
+        approve.setProperty("role", "primary")
+        approve.clicked.connect(lambda: self._run(self._approve()))
+        discard = QPushButton("Descartar")
+        discard.setProperty("role", "ghost")
+        discard.clicked.connect(lambda: self._run(self._discard()))
+        self.suggestion_actions = QWidget()
+        decide = QHBoxLayout(self.suggestion_actions)
+        decide.setContentsMargins(0, 0, 0, 0)
+        hint = QLabel("Dê dois cliques para corrigir o texto antes de aprovar.")
+        hint.setProperty("role", "hint")
+        decide.addWidget(hint, 1)
+        decide.addWidget(discard)
+        decide.addWidget(approve)
         row = QHBoxLayout()
         row.addWidget(self.new_item, 1)
         row.addWidget(add)
@@ -494,6 +525,14 @@ class MemorySection(QWidget):
         for widget in (intro, self.list, self.empty):
             layout.addWidget(widget, 1 if widget is not intro else 0)
         self.empty.hide()
+        parts: tuple[QWidget, ...] = (
+            self.suggestions_title,
+            self.suggestions,
+            self.suggestion_actions,
+        )
+        for part in parts:
+            layout.addWidget(part)
+            part.hide()
         layout.addLayout(row)
         layout.addLayout(actions)
         layout.addWidget(self.feedback)
@@ -525,10 +564,37 @@ class MemorySection(QWidget):
             entry.setFlags(entry.flags() | Qt.ItemFlag.ItemIsEditable)
             self.list.addItem(entry)
         self.list.blockSignals(False)
+        self.suggestions.clear()
+        pending = await service.suggestions() if hasattr(service, "suggestions") else []
+        for suggestion in pending:
+            confidence = f"{suggestion.confidence:.0%}" if suggestion.confidence else ""
+            entry = QListWidgetItem(suggestion.content)
+            entry.setData(Qt.ItemDataRole.UserRole, suggestion.id)
+            entry.setToolTip(f"Aprendido de uma conversa · confiança {confidence}")
+            entry.setFlags(entry.flags() | Qt.ItemFlag.ItemIsEditable)
+            self.suggestions.addItem(entry)
+        if pending:
+            self.suggestions.setCurrentRow(0)
+        for part in (self.suggestions_title, self.suggestions, self.suggestion_actions):
+            part.setVisible(bool(pending))
         has_items = self.list.count() > 0
         self.list.setVisible(has_items)
         self.empty.setVisible(not has_items)  # estado vazio com orientação (mascote)
         self.feedback.setText(f"{self.list.count()} memória(s)." if has_items else "")
+
+    async def _approve(self) -> None:
+        item = self.suggestions.currentItem()
+        service = self._service()
+        if item is not None and service is not None:
+            await service.approve(int(item.data(Qt.ItemDataRole.UserRole)), item.text())
+            await self.reload()
+
+    async def _discard(self) -> None:
+        item = self.suggestions.currentItem()
+        service = self._service()
+        if item is not None and service is not None:
+            await service.discard(int(item.data(Qt.ItemDataRole.UserRole)))
+            await self.reload()
 
     async def _add(self) -> None:
         text = self.new_item.text().strip()

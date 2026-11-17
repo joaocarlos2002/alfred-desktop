@@ -52,7 +52,7 @@ async def test_fresh_database_is_migrated_to_head(db: Database) -> None:
         tables = set(inspect(engine).get_table_names())
         assert tables >= EXPECTED_TABLES
         assert "settings" not in tables  # ADR-0004
-        assert db.current_revision() == "0002"
+        assert db.current_revision() == "0003"
     finally:
         engine.dispose()
 
@@ -97,7 +97,7 @@ async def test_outdated_database_is_backed_up_before_migration(tmp_path: Path) -
     await database.start()
     await database.stop()
 
-    (backup,) = tmp_path.glob("alfred.db.pre-0002-*.bak")
+    (backup,) = tmp_path.glob("alfred.db.pre-0003-*.bak")
     with sqlite3.connect(backup) as conn:
         assert conn.execute("SELECT x FROM legado").fetchone() == (42,)
 
