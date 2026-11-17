@@ -111,6 +111,12 @@ class AISettings(Section):
     """Modelo multimodal. Vazio: o primeiro com visão instalado no provedor."""
     max_parallel_steps: int = Field(default=4, ge=1, le=16)
     """Etapas independentes executadas ao mesmo tempo (rede, arquivos, leitura)."""
+    conversation_turns: int = Field(default=8, ge=0, le=50)
+    """Trocas recentes da conversa lembradas em cada pedido (0 desliga)."""
+    conversation_idle_minutes: int = Field(default=30, ge=1, le=1440)
+    """Depois de tanto tempo sem falar com o ALFRED, começa uma conversa nova."""
+    conversation_char_budget: int = Field(default=6000, ge=20, le=50000)
+    """Tamanho máximo (caracteres) das trocas enviadas como contexto."""
 
 
 class CursorSettings(Section):

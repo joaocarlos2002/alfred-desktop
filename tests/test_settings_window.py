@@ -166,3 +166,25 @@ def test_memory_and_triggers_sections_are_wired_in_the_real_app(
     remembered, saved = run_on_qt(scenario())
     assert remembered == ["Prefiro respostas curtas"]
     assert saved == ["Bom dia"]
+
+
+def test_memory_section_starts_a_new_conversation(qt_app: QApplication, tmp_path: Path) -> None:
+    from alfred.ui.settings_window import MemorySection
+
+    calls: list[str] = []
+
+    class Memory:
+        async def memories(self) -> list[object]:
+            return []
+
+        async def new_conversation(self) -> None:
+            calls.append("nova")
+
+    section = MemorySection(lambda: Memory())
+
+    async def scenario() -> str:
+        await section._new_conversation()
+        return section.feedback.text()
+
+    assert "Nova conversa" in run_on_qt(scenario())
+    assert calls == ["nova"]

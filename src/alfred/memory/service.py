@@ -8,11 +8,16 @@ que é excluído deixa imediatamente de ser usado no contexto.
 from __future__ import annotations
 
 import asyncio
+import builtins
 import logging
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
+from alfred.config.settings import AISettings
 from alfred.core.event_bus import EventBus, Subscription
 from alfred.core.orchestrator import AssistantReply
+from alfred.domain.ai import ChatMessage
 from alfred.domain.module import Module
 from alfred.domain.tasks import TaskStarted
 from alfred.infrastructure.db.memory_repository import MemoryItem
@@ -20,6 +25,9 @@ from alfred.infrastructure.db.memory_repository import MemoryItem
 logger = logging.getLogger(__name__)
 
 CONTEXT_CHAR_LIMIT = 2000
+SUMMARY_ITEMS = 10
+"""Pedidos antigos resumidos além da janela de trocas."""
+SUMMARY_CHARS = 120
 """~500 tokens: memórias mais recentes primeiro, até o limite."""
 
 
@@ -32,7 +40,15 @@ class MemoryStore(Protocol):
 
     async def delete(self, memory_id: int) -> bool: ...
 
-    async def add_message(self, conversation_id: str | None, role: str, content: str) -> str: ...
+    async def add_message(
+        self, conversation_id: str | None, role: str, content: str, at: datetime | None = None
+    ) -> str: ...
+
+    async def recent_messages(
+        self, conversation_id: str, limit: int
+    ) -> builtins.list[tuple[str, str, datetime]]: ...
+
+    async def latest_message(self) -> tuple[str, datetime] | None: ...
 
     async def forget_all(self) -> None: ...
 
@@ -42,14 +58,30 @@ class MemoryService(Module):
     depends_on = ("database", "event_bus")
     optional = True
 
-    def __init__(self, store: MemoryStore, bus: EventBus) -> None:
+    def __init__(
+        self,
+        store: MemoryStore,
+        bus: EventBus,
+        *,
+        config: Callable[[], AISettings] = AISettings,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self._store = store
         self._bus = bus
+        self._config = config
+        self._clock = clock
         self._conversation: str | None = None
+        self._last_at: datetime | None = None
         self._lock = asyncio.Lock()  # handlers concorrentes compartilham a conversa
         self._subscriptions: list[Subscription[Any]] = []
 
     async def start(self) -> None:
+        latest = await self._store.latest_message()
+        if latest is not None:  # continua a conversa se o ALFRED reiniciou há pouco
+            conversation, at = latest
+            at = at if at.tzinfo else at.replace(tzinfo=UTC)
+            if not self._expired(at):
+                self._conversation, self._last_at = conversation, at
         self._subscriptions = [
             self._bus.subscribe(TaskStarted, self._on_request, name="memory-requests"),
             self._bus.subscribe(AssistantReply, self._on_reply, name="memory-replies"),
@@ -78,6 +110,7 @@ class MemoryService(Module):
         async with self._lock:
             await self._store.forget_all()
             self._conversation = None
+            self._last_at = None
         logger.info("Memórias e conversas apagadas a pedido do usuário")
 
     async def context(self) -> str:
@@ -104,4 +137,59 @@ class MemoryService(Module):
 
     async def _record(self, role: str, content: str) -> None:
         async with self._lock:
-            self._conversation = await self._store.add_message(self._conversation, role, content)
+            now = self._clock()
+            if self._expired(self._last_at):
+                self._conversation = None  # pausa longa: assunto novo
+            self._conversation = await self._store.add_message(
+                self._conversation, role, content, now
+            )
+            self._last_at = now
+
+    # ------------------------------------------------------------------ contexto da conversa
+    def _expired(self, at: datetime | None) -> bool:
+        if at is None:
+            return True
+        idle = timedelta(minutes=self._config().conversation_idle_minutes)
+        return self._clock() - at > idle
+
+    async def new_conversation(self) -> None:
+        """Encerra o assunto atual: os próximos pedidos começam sem as trocas anteriores."""
+        async with self._lock:
+            self._conversation = None
+            self._last_at = None
+        logger.info("Nova conversa iniciada")
+
+    async def history(self) -> list[ChatMessage]:
+        """Trocas recentes da conversa atual para o contexto do modelo (#118).
+
+        As mais recentes entram inteiras até ``conversation_char_budget``; as anteriores viram
+        um resumo com os pedidos do usuário. Vazio fora de uma conversa ativa."""
+        ai = self._config()
+        conversation = self._conversation
+        if not ai.conversation_turns or conversation is None or self._expired(self._last_at):
+            return []
+        pool = await self._store.recent_messages(
+            conversation, ai.conversation_turns * 2 + SUMMARY_ITEMS * 2
+        )
+        kept: list[ChatMessage] = []
+        used = 0
+        window = pool[-ai.conversation_turns * 2 :]
+        for role, content, _ in reversed(window):
+            if role not in ("user", "assistant"):
+                continue
+            if used + len(content) > ai.conversation_char_budget:
+                break
+            kept.insert(0, ChatMessage(role=role, content=content))
+            used += len(content)
+        dropped = pool[: len(pool) - len(kept)]
+        earlier = [c for r, c, _ in dropped if r == "user"][-SUMMARY_ITEMS:]
+        if earlier:
+            summary = "\n".join(f"- {c[:SUMMARY_CHARS]}" for c in earlier)
+            kept.insert(
+                0,
+                ChatMessage(
+                    role="system",
+                    content="Antes, nesta mesma conversa, o usuário pediu:\n" + summary,
+                ),
+            )
+        return kept

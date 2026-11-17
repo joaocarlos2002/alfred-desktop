@@ -37,6 +37,8 @@ from alfred.domain.voice import SpeakRequested
 logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 8
+CONVERSATIONAL_ORIGINS = frozenset({"voice", "ui"})
+"""Pedidos de gatilhos são automações: não herdam o fio da conversa."""
 
 SYSTEM_PROMPT = """Você é o ALFRED, assistente pessoal no Windows 11, e fala português do Brasil.
 Para agir no computador, use SEMPRE as ferramentas disponíveis; nunca diga que fez algo sem ter
@@ -81,6 +83,7 @@ class Orchestrator(Module):
         speak: bool = True,
         context_provider: Callable[[], Awaitable[str]] | None = None,
         scheduler: StepScheduler | None = None,
+        history_provider: Callable[[], Awaitable[list[ChatMessage]]] | None = None,
         max_step_retries: int = 2,
         max_failures: int = 3,
         backoff: float = 0.5,
@@ -91,6 +94,7 @@ class Orchestrator(Module):
         self._max_failures = max_failures
         self._backoff = backoff
         self._scheduler = scheduler or StepScheduler()
+        self.history_provider = history_provider
         self.context_provider = context_provider
         self._planner = planner
         self._tools = tools
@@ -119,6 +123,10 @@ class Orchestrator(Module):
 
     async def run(self, request: str, *, origin: str = "voice", task_id: UUID | None = None) -> str:
         task_id = task_id or uuid4()
+        # Lido antes do TaskStarted: o pedido atual ainda não entrou no histórico.
+        previous: list[ChatMessage] = []
+        if self.history_provider is not None and origin in CONVERSATIONAL_ORIGINS:
+            previous = await self.history_provider()
         await self._bus.publish(TaskStarted(task_id=task_id, title=request, origin=origin))
         system = f"{SYSTEM_PROMPT}\n\n{self._capabilities()}"
         if self.context_provider is not None:
@@ -127,6 +135,7 @@ class Orchestrator(Module):
                 system = f"{system}\n\n{extra}"
         history = [
             ChatMessage(role="system", content=system),
+            *previous,
             ChatMessage(role="user", content=request),
         ]
         position = 0
