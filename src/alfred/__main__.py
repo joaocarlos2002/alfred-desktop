@@ -9,6 +9,7 @@ import os
 import sys
 from collections.abc import Sequence
 from dataclasses import replace
+from pathlib import Path
 
 from alfred import __version__
 from alfred.ai.ollama import OllamaProvider
@@ -40,11 +41,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="executa sem interface (sem Qt nem bandeja), útil para diagnóstico",
     )
+    parser.add_argument(
+        "--self-check",
+        action="store_true",
+        help="verifica os componentes nativos (voz, automação, IA) e sai",
+    )
+    parser.add_argument(
+        "--self-check-output",
+        type=Path,
+        default=None,
+        help="grava o resultado do --self-check neste arquivo JSON",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.self_check:
+        from alfred.diagnostics import main as self_check
+
+        return self_check(args.self_check_output)
 
     custom = data_dir() if os.environ.get(DATA_DIR_ENV) else None
     with SingleInstance(instance_name(custom)) as instance:
