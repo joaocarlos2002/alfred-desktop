@@ -317,6 +317,9 @@ def bootstrap(
         )
     if autostart is not None:
         modules.append(AutostartService(autostart, settings, bus))
+    dictation_backends: tuple[Any, Any] | None = None
+    if audio_backend is not None and app_lister is not None:
+        dictation_backends = (app_voice_pipeline, keyboard)
     hotkey_service: HotkeyService | None = None
     if hotkeys is not None:
         hotkey_service = HotkeyService(
@@ -375,6 +378,13 @@ def bootstrap(
     skill_manager = SkillManager(settings, tool_registry, command_registry)
     for skill in skills:
         skill_manager.register(skill)
+    if dictation_backends is not None:
+        from alfred.skills.dictation import START_GRACE_SECONDS, DictationSkill
+
+        pipeline, keyboard_service = dictation_backends
+        skill_manager.register(
+            DictationSkill(bus, pipeline, keyboard_service, start_grace=START_GRACE_SECONDS)
+        )
     modules.append(skill_manager)
     app = create_application(modules, bus=bus)
     app.orchestrator = orchestrator

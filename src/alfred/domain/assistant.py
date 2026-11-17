@@ -15,6 +15,7 @@ from alfred.domain.tasks import (
     TaskStepFinished,
     TaskStepStarted,
 )
+from alfred.domain.voice import DictationStarted, DictationStopped
 
 
 class AssistantState(StrEnum):
@@ -60,6 +61,7 @@ class AssistantStateMachine:
         self.state = AssistantState.IDLE
         self.detail: str | None = None
         self._listening = False
+        self._dictating = False
         self._tasks: dict[UUID, str] = {}
         self._running_steps: dict[UUID, str] = {}
         self._confirmations: dict[UUID, str] = {}
@@ -72,6 +74,10 @@ class AssistantStateMachine:
                 self._listening = True
             case ListeningStopped():
                 self._listening = False
+            case DictationStarted():
+                self._dictating = True
+            case DictationStopped():
+                self._dictating = False
             case TaskStarted(task_id=task_id, title=title):
                 self._tasks[task_id] = title
             case TaskStepStarted(task_id=task_id, tool=tool):
@@ -111,6 +117,9 @@ class AssistantStateMachine:
         if self._confirmations:
             self.detail = next(iter(self._confirmations.values()))
             return AssistantState.AWAITING_CONFIRMATION
+        if self._dictating:
+            self.detail = "Ditado ativo"
+            return AssistantState.LISTENING
         if self._listening:
             self.detail = None
             return AssistantState.LISTENING
