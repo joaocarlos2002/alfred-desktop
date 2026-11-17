@@ -6,6 +6,8 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from alfred.domain.events import Event
+
 Role = Literal["system", "user", "assistant", "tool"]
 
 
@@ -94,3 +96,10 @@ class LLMProvider(Protocol):
     ) -> ChatResponse: ...
 
     async def list_models(self) -> list[str]: ...
+
+
+class ModelLoading(Event):
+    """O modelo de IA local está sendo carregado; a primeira resposta vai demorar mais."""
+
+    provider: str
+    model: str

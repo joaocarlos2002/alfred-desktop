@@ -101,6 +101,8 @@ class AISettings(Section):
     """Tempo máximo de resposta do modelo (segundos)."""
     max_retries: int = Field(default=2, ge=0, le=5)
     """Novas tentativas em falhas temporárias (rede, timeout)."""
+    load_timeout_seconds: int = Field(default=180, ge=0, le=900)
+    """Tempo extra quando o modelo local ainda precisa ser carregado (pode levar minutos)."""
     external_base_url: str = "https://api.openai.com/v1"
     """URL do provedor externo compatível com a API da OpenAI (provedor "externo")."""
     vision_provider: str | None = None

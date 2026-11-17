@@ -110,6 +110,14 @@ class OllamaProvider:
         data = await self._request("GET", "/api/tags", 10)
         return [model["name"] for model in data.get("models", [])]
 
+    async def is_loaded(self, model: str) -> bool:
+        """O modelo já está na memória (GPU/CPU)? Carregar um modelo de ~5 GB leva de
+        dezenas de segundos a minutos, dependendo de disco, RAM livre e GPU."""
+        data = await self._request("GET", "/api/ps", 5)
+        loaded = {m.get("name") for m in data.get("models", [])}
+        loaded |= {m.get("model") for m in data.get("models", [])}
+        return model in loaded
+
     async def warm_up(self, model: str) -> None:
         """Carrega o modelo na memória (GPU/CPU) sem gerar texto; some após ``keep_alive``."""
         await self._request(

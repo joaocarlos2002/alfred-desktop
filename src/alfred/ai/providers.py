@@ -13,6 +13,7 @@ from alfred.domain.ai import (
     ChatMessage,
     ChatResponse,
     LLMProvider,
+    ModelLoading,
     ProviderError,
     ProviderTimeoutError,
     ProviderUnavailableError,
@@ -86,17 +87,24 @@ class AIService(Module):
         ai = self.config
         provider = self.registry.get(ai.provider)
         model = ai.model or await self._default_model(provider)
+        timeout = ai.timeout_seconds
+        if await self._needs_loading(provider, model):
+            # Sem isso, o primeiro pedido estourava o limite enquanto o modelo ainda carregava
+            # e a nova tentativa recomeçava a espera do zero.
+            timeout += ai.load_timeout_seconds
+            logger.info("Modelo %s/%s não está carregado; aguardando a carga", provider.name, model)
+            await self._bus.publish(ModelLoading(provider=provider.name, model=model))
         attempt = 0
         while True:
             started = time.perf_counter()
             try:
                 response = await asyncio.wait_for(
-                    provider.chat(messages, model=model, tools=tools, timeout=ai.timeout_seconds),
-                    ai.timeout_seconds + 5,
+                    provider.chat(messages, model=model, tools=tools, timeout=timeout),
+                    timeout + 5,
                 )
             except TimeoutError as exc:
                 error: ProviderError = ProviderTimeoutError(
-                    f"{provider.name} não respondeu em {ai.timeout_seconds} s"
+                    f"{provider.name} não respondeu em {timeout} s"
                 )
                 error.__cause__ = exc
             except ProviderError as exc:
@@ -119,6 +127,16 @@ class AIService(Module):
             delay = self._backoff * 2 ** (attempt - 1)
             logger.warning("IA falhou (%s); nova tentativa %d em %.1f s", error, attempt, delay)
             await asyncio.sleep(delay)
+
+    @staticmethod
+    async def _needs_loading(provider: LLMProvider, model: str) -> bool:
+        check = getattr(provider, "is_loaded", None)
+        if check is None:
+            return False
+        try:
+            return not await check(model)
+        except ProviderError:
+            return False  # o próprio pedido vai reportar a falha
 
     async def warm_up(self) -> None:
         """Pré-carrega o modelo local enquanto o usuário ainda fala (#47).

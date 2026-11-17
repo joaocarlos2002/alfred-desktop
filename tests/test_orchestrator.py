@@ -237,3 +237,17 @@ async def test_free_voice_requests_go_to_orchestrator(bus: EventBus) -> None:
 
 async def _noop() -> None:
     return None
+
+
+async def test_system_prompt_lists_only_real_capabilities(bus: EventBus) -> None:
+    """Regressão: sem a lista, o modelo dizia saber "organizar a agenda" e "mexer em arquivos"."""
+    provider = FakeProvider(replies=[assistant(text="ok"), assistant(text="ok")])
+    await orchestrator(bus, provider, tools([]), Permissions()).run("o que você sabe fazer?")
+    system = provider.calls[0]["messages"][0].content
+    assert "- Abre um app" in system
+    assert "- Digita texto" in system
+    assert "SOMENTE estas capacidades" in system
+
+    empty = FakeProvider(replies=[assistant(text="ok")])
+    await orchestrator(bus, empty, ToolRegistry(), Permissions()).run("o que você sabe fazer?")
+    assert "só pode conversar" in empty.calls[0]["messages"][0].content
