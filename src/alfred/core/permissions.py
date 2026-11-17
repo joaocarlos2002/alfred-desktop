@@ -70,6 +70,10 @@ class PermissionService(Module):
     async def stop(self) -> None:
         return None
 
+    def category_policy(self, category: str) -> Policy | None:
+        """Política definida pelo usuário para a categoria (``None`` = padrão pelo risco)."""
+        return self._policies.get((category, None))
+
     def policy_for(self, tool: Tool) -> Policy:
         policy = self._policies.get((tool.category, tool.name)) or self._policies.get(
             (tool.category, None)
