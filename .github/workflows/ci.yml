@@ -60,11 +60,24 @@ jobs:
       - name: Build (PyInstaller) e testes de fumaça
         run: uv run python scripts/build.py
 
-      - name: Publicar artefato
+      - name: Instalador (Inno Setup)
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          uv run python scripts/build_installer.py
+
+      - name: Testar instalar, atualizar e desinstalar (VM limpa)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist/ALFRED-Setup-*.exe | Select-Object -First 1
+          ./scripts/test_installer.ps1 -Installer $setup.FullName
+
+      - name: Publicar artefatos
         uses: actions/upload-artifact@v4
         with:
           name: ALFRED-win64
-          path: dist/ALFRED-*-win64.zip
+          path: |
+            dist/ALFRED-*-win64.zip
+            dist/ALFRED-Setup-*.exe
           if-no-files-found: error
           retention-days: 30
 

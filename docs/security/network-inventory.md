@@ -8,6 +8,7 @@ falha quando surge uma saída nova que não está registrada aqui.
 | Módulo | Fluxo | Destino | O que é enviado | Controle |
 |---|---|---|---|---|
 | `alfred/ai/ollama.py` | IA local (Ollama) | `127.0.0.1:11434`, este computador | pedidos, contexto e memórias; imagens quando você pede uma análise de tela | não sai do computador |
+| `alfred/ai/setup.py` | instalação da IA local (`alfred --setup-ai`) | `ollama.com` (instalador); modelos pelo servidor Ollama | nada seu; download público, instalador executado só com assinatura Authenticode válida da Ollama | só na instalação ou a seu pedido |
 | `alfred/diagnostics.py` | autodiagnóstico (`alfred --self-check`) | `127.0.0.1:11434`, este computador | nada; só lista os modelos do Ollama local | só quando você roda o diagnóstico |
 | `alfred/ai/openai_compat.py` | IA externa | URL em `ai.external_base_url` | pedidos, contexto e memórias; imagens só com autorização a cada envio | `privacy.network_enabled` (desligado por padrão) e escolha do provedor |
 | `alfred/voice/models.py` | download dos modelos de voz (Vosk, Piper) | `alphacephei.com`, `huggingface.co` | nada seu; download público com SHA-256 conferido | só quando o modelo falta |
