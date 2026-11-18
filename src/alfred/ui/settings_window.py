@@ -1392,7 +1392,7 @@ class SettingsWindowModule(Module):
             self.window.deleteLater()
             self.window = None
 
-    def show(self) -> None:
+    def show(self, section: str | None = None) -> None:
         if self.window is None:
             self.window = SettingsWindow(
                 self._settings,
@@ -1407,6 +1407,8 @@ class SettingsWindowModule(Module):
             )
         else:
             self.window.reload()
+        if section is not None:
+            self.window.select(section)
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()

@@ -158,6 +158,43 @@ class Motion:
 
 
 @dataclass(frozen=True)
+class Stage:
+    """Palco do widget e do painel rápido (#113): vidro escuro, luzes e cores de estado."""
+
+    base: str = "#0D0E12"
+    ink: str = "#F2F0EC"
+    muted: str = "#9A9CA3"
+    sub: str = "#C9CBD1"
+    gold: str = "#C9A87C"
+    gold_hi: str = "#F1D6A8"
+    gold_glow: str = "#FFF0D6"
+    gold_text: str = "#141210"
+    white: str = "#FFFFFF"
+    black: str = "#000000"
+    glass: str = "#0C0D11"
+    glass_hover: str = "#1E1F26"
+    track: str = "#2A2B31"
+    knob: str = "#8D8F96"
+    knob_on: str = "#111111"
+    orb_top: str = "#2A2B31"
+    orb_bottom: str = "#0C0D10"
+    orb_edge: str = "#0B0C10"
+    violet: str = "#785AC8"
+    teal: str = "#3C8CAA"
+    ok: str = "#7BD88F"
+    warn: str = "#FFB054"
+    # Cores dos estados do assistente no widget.
+    mode_idle: str = "#C9A87C"
+    mode_listening: str = "#6ED6C8"
+    mode_thinking: str = "#A78BFA"
+    mode_executing: str = "#7DB0FF"
+    mode_speaking: str = "#F1C478"
+    mode_confirm: str = "#FFB054"
+    mode_done: str = "#7BD88F"
+    mode_error: str = "#F06868"
+
+
+@dataclass(frozen=True)
 class Theme:
     colors: Colors = field(default_factory=Colors)
     typography: Typography = field(default_factory=Typography)
@@ -165,10 +202,16 @@ class Theme:
     radius: Radius = field(default_factory=Radius)
     elevation: Elevation = field(default_factory=Elevation)
     motion: Motion = field(default_factory=Motion)
+    stage: Stage = field(default_factory=Stage)
 
     def color(self, name: str, alpha: int = 255) -> QColor:
         color = QColor(getattr(self.colors, name))
         color.setAlpha(alpha)
+        return color
+
+    def stage_color(self, name: str, alpha: int = 255) -> QColor:
+        color = QColor(getattr(self.stage, name))
+        color.setAlpha(max(0, min(255, alpha)))
         return color
 
     def font(
