@@ -445,7 +445,17 @@ def bootstrap(
             export=lambda: action_log.export(data_root / "exports"),
         )
         app.manager.register(panel)
-        app.manager.register(WidgetModule(bus=bus, settings=settings, on_click=panel.toggle))
+        app.manager.register(
+            WidgetModule(
+                bus=bus,
+                settings=settings,
+                # Os atalhos do painel rápido abrem a seção pedida das configurações (#113).
+                on_open_settings=lambda section: settings_window.show(section),
+                on_open_activity=panel.show,
+                ai_providers=lambda: provider_locality(ai_registry),
+                voice_available=audio_backend is not None,
+            )
+        )
         app.manager.register(ConfirmationUiModule(bus=bus, service=confirmations))
         overlay = OverlayModule()
         app.overlay = overlay

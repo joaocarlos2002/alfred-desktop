@@ -31,6 +31,10 @@ def main() -> int:
     image.scaled(360, 360, Qt.AspectRatioMode.KeepAspectRatio, smooth).save(
         str(OUT / "butler.png"), "PNG"
     )
+    # Painel rápido do widget (#113): corpo inteiro em resolução maior para telas HiDPI.
+    image.scaled(512, 512, Qt.AspectRatioMode.KeepAspectRatio, smooth).save(
+        str(OUT / "butler_hi.png"), "PNG"
+    )
     image.copy(AVATAR_CROP).scaled(128, 128, Qt.AspectRatioMode.KeepAspectRatio, smooth).save(
         str(OUT / "butler_avatar.png"), "PNG"
     )
